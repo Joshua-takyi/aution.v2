@@ -1,0 +1,26 @@
+{
+  "title": "Patek Philippe Nautilus 5711",
+  "description": "The Nautilus 5711 is one of the most coveted luxury sports watches in the world. Designed by Gérald Genta, its rounded octagonal bezel and porthole construction are iconic.",
+  "price": 120000,
+  "details": [
+    {
+      "Brand": "Patek Philippe"
+    },
+    {
+      "Model": "Nautilus"
+    },
+    {
+      "Reference": "5711/1A-010"
+    },
+    {
+      "Movement": "Automatic"
+    },
+    {
+      "Case Material": "Steel"
+    },
+    {
+      "Year": "2021"
+    }
+  ],
+  "category": ["Watches", "Luxury"]
+}

@@ -7,17 +7,14 @@ import (
 )
 
 type Config struct {
-	Port                  string
-	MongoDBURI            string
-	CloudinaryCloudName   string
-	CloudinaryAPIKey      string
-	CloudinaryAPISecret   string
-	MongoDBPassword       string
+	Port string
+	// MongoDBURI            string
+	CloudinaryCloudName string
+	CloudinaryAPIKey    string
+	CloudinaryAPISecret string
+	// MongoDBPassword       string
 	Environment           string
 	LogLevel              string
-	SupbaseUrl            string
-	SupabaseServiceKey    string
-	SupabaseAnonKey       string
 	AllowedOrigins        []string
 	FrontendURL           string
 	PaystackPublicKey     string
@@ -25,8 +22,13 @@ type Config struct {
 	PaystackTestPublicKey string
 	PaystackTestSecretKey string
 	ResendAPIKey          string
+	// Supabase Configuration
+	SupbaseUrl         string
+	SupabaseServiceKey string
+	SupabaseAnonKey    string
 	// JWT Configuration
 	JWTSecret            string
+	SupabaseJWTSecret    string
 	JWTAccessExpiration  string // e.g., "15m", "1h"
 	JWTRefreshExpiration string // e.g., "7d", "30d"
 }
@@ -34,16 +36,16 @@ type Config struct {
 func LoadConfig() (*Config, error) {
 	env := strings.ToLower(strings.TrimSpace(getEnvWithDefault("ENVIRONMENT", "development")))
 	cfg := &Config{
-		Port:                getEnvWithDefault("PORT", "8080"),
-		MongoDBURI:          os.Getenv("MONGODB_URI"),
+		Port: getEnvWithDefault("PORT", "8080"),
+		// MongoDBURI:          os.Getenv("MONGODB_URI"),
 		CloudinaryCloudName: os.Getenv("CLOUDINARY_CLOUD_NAME"),
 		CloudinaryAPIKey:    os.Getenv("CLOUDINARY_API_KEY"),
 		CloudinaryAPISecret: os.Getenv("CLOUDINARY_API_SECRET"),
-		MongoDBPassword:     os.Getenv("MONGODB_PASSWORD"),
-		Environment:         env,
-		SupbaseUrl:          os.Getenv("SUPABASE_URL"),
-		SupabaseServiceKey:  os.Getenv("SUPABASE_SERVICE_KEY"),
-		SupabaseAnonKey:     os.Getenv("SUPABASE_ANON_KEY"),
+		// MongoDBPassword:     os.Getenv("MONGODB_PASSWORD"),
+		Environment:        env,
+		SupbaseUrl:         os.Getenv("SUPABASE_URL"),
+		SupabaseServiceKey: os.Getenv("SUPABASE_SERVICE_KEY"),
+		SupabaseAnonKey:    os.Getenv("SUPABASE_ANON_KEY"),
 
 		LogLevel:              getEnvWithDefault("LOG_LEVEL", "info"),
 		ResendAPIKey:          os.Getenv("RESEND_API_KEY"),
@@ -54,6 +56,7 @@ func LoadConfig() (*Config, error) {
 		PaystackTestSecretKey: os.Getenv("PAYSTACK_TEST_SECRET_KEY"),
 		// JWT Configuration
 		JWTSecret:            os.Getenv("JWT_SECRET"),
+		SupabaseJWTSecret:    os.Getenv("SUPABASE_JWT_SECRET"),
 		JWTAccessExpiration:  getEnvWithDefault("JWT_ACCESS_EXPIRATION", "15m"),
 		JWTRefreshExpiration: getEnvWithDefault("JWT_REFRESH_EXPIRATION", "7d"),
 	}
@@ -67,9 +70,9 @@ func LoadConfig() (*Config, error) {
 	}
 	cfg.AllowedOrigins = splitAndTrim(allowedOrigins)
 
-	if cfg.MongoDBURI == "" {
-		return nil, fmt.Errorf("MONGODB_URI is required")
-	}
+	// if cfg.MongoDBURI == "" {
+	// 	return nil, fmt.Errorf("MONGODB_URI is required")
+	// }
 
 	if cfg.SupabaseServiceKey == "" {
 		return nil, fmt.Errorf("failed to load the supabase  service role key ")
@@ -82,9 +85,9 @@ func LoadConfig() (*Config, error) {
 	if cfg.SupbaseUrl == "" {
 		return nil, fmt.Errorf("failed to load the supabase url")
 	}
-	if cfg.MongoDBPassword == "" {
-		return nil, fmt.Errorf("MONGODB_PASSWORD is required")
-	}
+	// if cfg.MongoDBPassword == "" {
+	// 	return nil, fmt.Errorf("MONGODB_PASSWORD is required")
+	// }
 	if cfg.CloudinaryCloudName == "" {
 		return nil, fmt.Errorf("CLOUDINARY_CLOUD_NAME is required")
 	}

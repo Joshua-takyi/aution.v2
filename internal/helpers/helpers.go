@@ -1,6 +1,12 @@
 package helpers
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"strings"
+
+	"github.com/joshua-takyi/auction/internal/models"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -41,4 +47,41 @@ func ValidatePassword(pass string) bool {
 	}
 
 	return hasLower && hasUpper && hasDigit && hasSpecial
+}
+
+func ValidateProductInput(product *models.Product) error {
+	if product.Title == "" {
+		return errors.New("title is required")
+	}
+	if product.Description == "" {
+		return errors.New("description is required")
+	}
+
+	if product.Price <= 0 {
+		return errors.New("price must be greater than 0")
+	}
+	if len(product.Images) == 0 {
+		return errors.New("images are required")
+	}
+	if len(product.Details) == 0 {
+		return errors.New("details are required")
+	}
+	return nil
+}
+
+func GenerateSlug(title, category string) string {
+	s := strings.ToLower(title)
+	s = strings.ReplaceAll(s, " ", "-")
+	s = strings.ReplaceAll(s, "&", "and")
+	s = strings.ReplaceAll(s, "'", "")
+	s = strings.ReplaceAll(s, "", "")
+	return s
+}
+
+func GenerateCsrfToken() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
 }

@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cloudinary/cloudinary-go/v2"
@@ -14,7 +16,6 @@ import (
 	config "github.com/joshua-takyi/auction/internal/configs"
 	"github.com/joshua-takyi/auction/internal/connection"
 	"github.com/joshua-takyi/auction/internal/container"
-	"github.com/joshua-takyi/auction/internal/helpers"
 	"github.com/joshua-takyi/auction/internal/routes"
 )
 
@@ -37,18 +38,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Connect to MongoDB
-	mongoClient, err := connection.Connect(cfg.MongoDBURI, cfg.MongoDBPassword)
+	storage, err := connection.ConnectSupabaseStorage(cfg.SupbaseUrl, cfg.SupabaseAnonKey)
 	if err != nil {
-		logger.Error("Failed to connect to MongoDB", "error", err)
-		log.Fatal(err)
+		logger.Error("failed to connect to supabase storage", "error", err)
+		os.Exit(1)
 	}
 
-	defer func() {
-		if err := connection.Disconnect(); err != nil {
-			logger.Error("Failed to disconnect from MongoDB", "error", err)
-		}
-	}()
+	// Connect to MongoDB
+	// mongoClient, err := connection.Connect(cfg.MongoDBURI, cfg.MongoDBPassword)
+	// if err != nil {
+	// 	logger.Error("Failed to connect to MongoDB", "error", err)
+	// 	log.Fatal(err)
+	// }
+
+	// defer func() {
+	// 	if err := connection.Disconnect(); err != nil {
+	// 		logger.Error("Failed to disconnect from MongoDB", "error", err)
+	// 	}
+	// }()
 
 	// Initialize Cloudinary (optional - can be nil if not configured)
 	var cloudinaryClient *cloudinary.Cloudinary
@@ -67,17 +74,14 @@ func main() {
 	}
 
 	// Initialize dependency injection container
-	appContainer, err := container.NewContainer(logger, cfg, cloudinaryClient, mongoClient, resendClient, supa, cfg.IsProduction())
+	appContainer, err := container.NewContainer(logger, cfg, cloudinaryClient, resendClient, storage, supa, cfg.IsProduction())
 	if err != nil {
 		logger.Error("Failed to create container", "error", err)
 		log.Fatal(err)
 	}
 
-	// Start background workers
-	helpers.StartCleanupWorker(context.Background(), logger, appContainer.VerificationRepo.DeleteExpiredVerificationTokens)
-
 	// Setup routes with injected dependencies
-	router := routes.SetupRoutes(appContainer)
+	router := routes.SetupRoutes(appContainer, cfg)
 
 	// Configure HTTP server
 	server := &http.Server{
@@ -87,11 +91,26 @@ func main() {
 		WriteTimeout: 10 * time.Second,
 		IdleTimeout:  120 * time.Second,
 	}
+	go func() {
+		logger.Info("starting server")
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			logger.Error("failed to connect to the http server")
+			os.Exit(1)
+		}
+	}()
 
-	logger.Info("Server starting", "port", cfg.Port)
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		logger.Error("Server failed to start", "error", err)
-		log.Fatal(err)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+
+	logger.Info("server shutting down")
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	defer cancel()
+
+	// shutdown server
+	if err := server.Shutdown(ctx); err != nil {
+		logger.Error("server forced to shutdown", "error", err)
 	}
 }
 

@@ -3,10 +3,10 @@ package constants
 type DbConstants string
 
 const (
-	DbName                 DbConstants = "auction"
-	ProductCollection      DbConstants = "products"
-	UserCollection         DbConstants = "users"
-	ProfileCollection      DbConstants = "profiles"
-	RefreshTokenCollection DbConstants = "refresh_tokens"
-	VerificationCollection DbConstants = "verifications"
+	DbName            DbConstants = "auction"
+	ProductTable      DbConstants = "products"
+	UserTable         DbConstants = "users"
+	ProfileTable      DbConstants = "profiles"
+	RefreshTokenTable DbConstants = "refresh_tokens"
+	VerificationTable DbConstants = "verifications"
 )

@@ -1,6 +1,7 @@
 package models
 
 import (
+	storage_go "github.com/supabase-community/storage-go"
 	"github.com/supabase-community/supabase-go"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -16,11 +17,26 @@ func MongodbNewRepo(client *mongo.Client) (*MongodbRepo, error) {
 }
 
 type SupabaseRepo struct {
-	supabase *supabase.Client
+	supabase      *supabase.Client
+	storage       *storage_go.Client
+	url           string
+	anonKey       string
+	serviceKey    string
+	serviceClient *supabase.Client
 }
 
-func NewSupabasRepo(client *supabase.Client) (*SupabaseRepo, error) {
+func NewSupabaseRepo(client *supabase.Client, storage *storage_go.Client, url, anonKey, serviceKey string) *SupabaseRepo {
+	var serviceClient *supabase.Client
+	if serviceKey != "" {
+		serviceClient, _ = supabase.NewClient(url, serviceKey, nil)
+	}
+
 	return &SupabaseRepo{
-		supabase: client,
-	}, nil
+		supabase:      client,
+		storage:       storage,
+		url:           url,
+		anonKey:       anonKey,
+		serviceKey:    serviceKey,
+		serviceClient: serviceClient,
+	}
 }

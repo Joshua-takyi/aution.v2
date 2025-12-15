@@ -1,8 +1,6 @@
 package jwt
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"time"
 
@@ -33,55 +31,28 @@ type Claims struct {
 
 // JWTManager handles JWT token operations
 type JWTManager struct {
-	secretKey       string
-	tokenExpiration time.Duration
+	secretKey         string
+	supabaseSecretKey string
+	tokenExpiration   time.Duration
 }
 
 // NewJWTManager creates a new JWT manager
-func NewJWTManager(secretKey string, tokenExpiration time.Duration) *JWTManager {
+func NewJWTManager(secretKey, supabaseSecretKey string, tokenExpiration time.Duration) *JWTManager {
 	return &JWTManager{
-		secretKey:       secretKey,
-		tokenExpiration: tokenExpiration,
+		secretKey:         secretKey,
+		supabaseSecretKey: supabaseSecretKey,
+		tokenExpiration:   tokenExpiration,
 	}
 }
 
-// GenerateToken creates a new JWT token for the user
-func (m *JWTManager) GenerateToken(user UserAuth) (string, error) {
-	// Create claims with user information
-	claims := Claims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(m.tokenExpiration)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "auction-api",
-			Subject:   user.ID,
-		},
-	}
-
-	// Create token with claims
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	// Sign and get the complete encoded token as a string
-	tokenString, err := token.SignedString([]byte(m.secretKey))
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
-
-// VerifyToken validates and parses a JWT token
-func (m *JWTManager) VerifyToken(tokenString string) (*UserAuth, error) {
-	// Parse and validate the token
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
-		// Verify the signing method
+func (m *JWTManager) VerifySupabaseToken(tokenString string) (*UserAuth, error) {
+	// Supabase tokens are standard JWTs signed with the project secret
+	// We use the supabaseSecretKey to verify signature
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, ErrInvalidSignature
 		}
-		return []byte(m.secretKey), nil
+		return []byte(m.supabaseSecretKey), nil
 	})
 
 	if err != nil {
@@ -91,85 +62,29 @@ func (m *JWTManager) VerifyToken(tokenString string) (*UserAuth, error) {
 		return nil, ErrInvalidToken
 	}
 
-	// Extract claims
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
+	if !token.Valid {
 		return nil, ErrInvalidToken
 	}
 
-	// Create UserAuth from claims
-	userAuth := &UserAuth{
-		ID:    claims.UserID,
-		Email: claims.Email,
-		Role:  claims.Role,
+	// Supabase user claims:
+	// "sub": user_id
+	// "email": user_email
+	// "role": authenticated (usually)
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, ErrInvalidToken
 	}
 
-	return userAuth, nil
-}
+	// Extract standard claims
+	userID, _ := claims["sub"].(string)
+	email, _ := claims["email"].(string)
+	role, _ := claims["role"].(string) // "authenticated" usually
 
-// GenerateRefreshToken creates a refresh token with longer expiration
-func (m *JWTManager) GenerateRefreshToken(user UserAuth, refreshExpiration time.Duration) (string, error) {
-	claims := Claims{
-		UserID: user.ID,
-		Email:  user.Email,
-		Role:   user.Role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(refreshExpiration)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-			Issuer:    "auction-api-refresh",
-			Subject:   user.ID,
-		},
-	}
+	// You can also check "aud" == "authenticated" if needed.
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString([]byte(m.secretKey))
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
-
-// GenerateCsrfToken generates a cryptographically secure random CSRF token
-func GenerateCsrfToken() (string, error) {
-	bytes := make([]byte, 32)
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(bytes), nil
-}
-
-// TokenPair represents access and refresh tokens
-type TokenPair struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	TokenType    string    `json:"token_type"`
-	ExpiresIn    int64     `json:"expires_in"` // seconds
-	ExpiresAt    time.Time `json:"expires_at"`
-}
-
-// GenerateTokenPair creates both access and refresh tokens
-func (m *JWTManager) GenerateTokenPair(user UserAuth, refreshExpiration time.Duration) (*TokenPair, error) {
-	// Generate access token
-	accessToken, err := m.GenerateToken(user)
-	if err != nil {
-		return nil, err
-	}
-
-	// Generate refresh token
-	refreshToken, err := m.GenerateRefreshToken(user, refreshExpiration)
-	if err != nil {
-		return nil, err
-	}
-
-	expiresAt := time.Now().Add(m.tokenExpiration)
-
-	return &TokenPair{
-		AccessToken:  accessToken,
-		RefreshToken: refreshToken,
-		TokenType:    "Bearer",
-		ExpiresIn:    int64(m.tokenExpiration.Seconds()),
-		ExpiresAt:    expiresAt,
+	return &UserAuth{
+		ID:    userID,
+		Email: email,
+		Role:  role,
 	}, nil
 }

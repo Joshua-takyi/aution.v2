@@ -8,15 +8,17 @@ import (
 
 	"github.com/joshua-takyi/auction/internal/constants"
 	"github.com/resend/resend-go/v3"
+	storage_go "github.com/supabase-community/storage-go"
 	"github.com/supabase-community/supabase-go"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 var (
-	Client         *mongo.Client
-	ResendClient   *resend.Client
-	SupabaseClient *supabase.Client
+	Client                *mongo.Client
+	ResendClient          *resend.Client
+	SupabaseClient        *supabase.Client
+	SupabaseStorageClient *storage_go.Client
 )
 
 func Connect(url, pass string) (*mongo.Client, error) {
@@ -63,4 +65,10 @@ func ConnectSupabase(url, key string) (*supabase.Client, error) {
 	}
 	SupabaseClient = client
 	return SupabaseClient, nil
+}
+
+func ConnectSupabaseStorage(url, key string) (*storage_go.Client, error) {
+	client := storage_go.NewClient(url, key, nil)
+	SupabaseStorageClient = client
+	return SupabaseStorageClient, nil
 }

@@ -2,152 +2,73 @@ package service
 
 import (
 	"context"
-	"fmt"
-	"log"
-	"time"
+	"errors"
 
+	"github.com/google/uuid"
 	"github.com/joshua-takyi/auction/internal/constants"
-	"github.com/joshua-takyi/auction/internal/helpers"
 	"github.com/joshua-takyi/auction/internal/models"
 	"github.com/resend/resend-go/v3"
-	"go.mongodb.org/mongo-driver/bson/primitive"
+	"github.com/supabase-community/gotrue-go/types"
 )
 
 type UserService struct {
-	userRepo           models.UserInterface
-	resend             *resend.Client
-	profileRepo        models.ProfileInterface
-	verificationClient models.VerificationInterface
+	userRepo models.UserInterface
+	resend   *resend.Client
+	// profileRepo models.ProfileInterface
+	// We remove verificationClient as Supabase handles verification
 }
 
-func NewUserService(userRepo models.UserInterface, resend *resend.Client, profileRepo models.ProfileInterface, verificationClient models.VerificationInterface) *UserService {
+// NewUserService - removing verificationClient from constructor
+func NewUserService(userRepo models.UserInterface, resend *resend.Client) *UserService {
 	return &UserService{
-		userRepo:           userRepo,
-		resend:             resend,
-		profileRepo:        profileRepo,
-		verificationClient: verificationClient,
+		userRepo: userRepo,
+		resend:   resend,
+		// profileRepo: profileRepo,
 	}
 }
 
+// CreateUser registers a user using Supabase Auth
 func (u *UserService) CreateUser(ctx context.Context, email, password string) (*models.User, error) {
-	// validate form
 	if email == "" || password == "" {
 		return nil, constants.ErrEmptyFields
 	}
 
-	ok := helpers.ValidatePassword(password)
-	if !ok {
-		return nil, constants.ErrWeakPassword
+	// we pass an empty string for the accessToken , so that we can use the service role
+	existingUser, err := u.userRepo.GetUserByEmail(ctx, email, "")
+	if err != nil {
+		return nil, err
 	}
-
-	// Step 1: Create the user first
-	user, err := u.userRepo.CreateUser(ctx, email, password)
+	if existingUser != nil {
+		return nil, constants.ErrUserAlreadyExists
+	}
+	// Call Supabase SignUp
+	sbUser, err := u.userRepo.SignUp(ctx, email, password)
 	if err != nil {
 		return nil, err
 	}
 
-	verificationToken := helpers.GenerateVerificationToken()
-	hashedToken, err := helpers.HashPassword(verificationToken)
-	if err != nil {
-		// User is created but we couldn't generate token
-		log.Printf("Failed to generate verification token: %v", err)
-		return user, nil // Still return user as they're created
-	}
-	verification := &models.Verification{
-		ID:        primitive.NewObjectID(),
-		UserID:    user.ID,
-		Token:     hashedToken,
-		CreatedAt: time.Now(),
-		ExpiresAt: time.Now().Add(10 * time.Minute),
-	}
-
-	_, err = u.verificationClient.CreateVerification(ctx, verification)
-	if err != nil {
-		log.Printf("Failed to save verification token: %v", err)
-		return user, nil // Still return user
-	}
-
-	// Step 4: Send verification email
-	verificationLink := fmt.Sprintf("http://localhost:8080/verify?token=%s&email=%s", verificationToken, email)
-	err = helpers.SendVerificationEmail(u.resend, email, verificationLink)
-	if err != nil {
-		log.Printf("Failed to send verification email: %v", err)
-	}
-
-	return user, nil
+	// Return our local User model (shell)
+	return &models.User{
+		ID:        sbUser.ID,
+		Email:     sbUser.Email,
+		CreatedAt: sbUser.CreatedAt,
+	}, nil
 }
 
+// VerifyUser - DEPRECATED/REMOVED for Supabase flow (handled by Supabase link)
 func (u *UserService) VerifyUser(ctx context.Context, token, email string) error {
-	if token == "" || email == "" {
-		return constants.ErrEmptyFields
-	}
-
-	// Find user by email
-	user, err := u.userRepo.FindUserByEmail(ctx, email)
-	if err != nil {
-		return err
-	}
-
-	// Find verification token by UserID
-	verification, err := u.verificationClient.FindVerificationByUserID(ctx, user.ID)
-	if err != nil {
-		return err
-	}
-
-	if verification == nil {
-		return constants.ErrUserNotFound
-	}
-
-	// Verify token hash
-	ok := helpers.CheckPasswordHash(token, verification.Token)
-	if !ok {
-		return constants.ErrInvalidToken
-	}
-
-	if time.Now().After(verification.ExpiresAt) {
-		return constants.ErrTokenExpired // Or a more appropriate error
-	}
-
-	// Step 5: Update user verification status
-	if err := u.userRepo.UpdateUserVerificationStatus(ctx, verification.UserID, true); err != nil {
-		log.Printf("Failed to update user verification status: %v", err)
-		return err
-	}
-
-	// Step 6: Create profile
-	if err := u.profileRepo.CreateProfile(ctx, email, &models.Profile{}); err != nil {
-		log.Printf("Failed to create profile: %v", err)
-		return err
-	}
-	// Step 6: Delete verification record
-	if err := u.verificationClient.DeleteVerificationToken(ctx, token); err != nil {
-		log.Printf("Failed to delete verification token: %v", err)
-		return err
-	}
-
-	return nil
+	return errors.New("verification is handled by supabase")
 }
 
-func (u *UserService) AuthenticateUser(ctx context.Context, email, password string) (*models.User, error) {
-	//if the user isn't verified, return error
-	ok, err := u.userRepo.IsVerified(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-	if !ok {
-		return nil, constants.ErrUserNotVerified
+// AuthenticateUser signs in via Supabase and returns the Token Response
+func (u *UserService) AuthenticateUser(ctx context.Context, email, password string) (*types.TokenResponse, error) {
+	if email == "" || password == "" {
+		return nil, constants.ErrEmptyFields
 	}
 
-	user, err := u.userRepo.FindUserByEmail(ctx, email)
-	if err != nil {
-		return nil, err
-	}
-	if ok := helpers.CheckPasswordHash(password, user.Password); !ok {
-		return nil, constants.ErrInvalidCredentials
-	}
-	return user, nil
+	return u.userRepo.SignIn(ctx, email, password)
 }
 
-func (s *UserService) GetProfileByUserId(ctx context.Context, id primitive.ObjectID) (*models.Profile, error) {
-	return s.profileRepo.GetUserProfileByID(ctx, id)
+func (u *UserService) GetUserById(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	return u.userRepo.GetUserByID(ctx, id)
 }
