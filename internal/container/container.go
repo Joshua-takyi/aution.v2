@@ -55,7 +55,7 @@ func NewContainer(
 	// Initialize services
 	// Pass supaRepo for UserInterface, mongoRepo for ProfileInterface
 	userService := service.NewUserService(supaRepo, resendClient)
-	productService := service.NewProductService(supaRepo)
+	productService := service.NewProductService(supaRepo, cloudinary)
 
 	// Parse JWT durations
 	accessDuration, err := time.ParseDuration(cfg.JWTAccessExpiration)

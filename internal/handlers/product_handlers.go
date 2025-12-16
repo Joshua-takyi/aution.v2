@@ -1,12 +1,12 @@
 package handlers
 
 import (
-	"bytes"
 	"encoding/json"
-	"io"
+	"errors"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/joshua-takyi/auction/internal/constants"
 	"github.com/joshua-takyi/auction/internal/models"
 	"github.com/joshua-takyi/auction/internal/service"
@@ -15,6 +15,18 @@ import (
 
 func CreateProductHandler(s *service.ProductService, logger *utils.Logger) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		user, exists := c.Get("user")
+		if !exists {
+			utils.Unauthorized(c, "User not found", "")
+			return
+		}
+
+		userModel, ok := user.(*models.User)
+		if !ok {
+			utils.Unauthorized(c, "User not found", "Please login")
+			return
+		}
+		userID := userModel.ID
 		// 1. Parse Multipart Form
 		// Increase memory limit for parsing (default is 32MB)
 		if err := c.Request.ParseMultipartForm(32 << 20); err != nil {
@@ -44,42 +56,133 @@ func CreateProductHandler(s *service.ProductService, logger *utils.Logger) gin.H
 		}
 		files := form.File["images"]
 
-		var uploadFiles []models.FileUpload
-		for _, fileHeader := range files {
-			f, err := fileHeader.Open()
-			if err != nil {
-				logger.Warn("Failed to open file", map[string]interface{}{"filename": fileHeader.Filename, "error": err.Error()})
-				continue
-			}
-			defer f.Close()
-
-			buf := new(bytes.Buffer)
-			if _, err := io.Copy(buf, f); err != nil {
-				logger.Warn("Failed to read file", map[string]interface{}{"filename": fileHeader.Filename, "error": err.Error()})
-				continue
-			}
-
-			uploadFiles = append(uploadFiles, models.FileUpload{
-				Filename: fileHeader.Filename,
-				Data:     buf.Bytes(),
-			})
-		}
-
-		// Extract access token from header
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			utils.Unauthorized(c, "Authorization header required", "")
+		accessToken, err := c.Cookie("access_token")
+		if err != nil {
+			utils.Unauthorized(c, "Unauthorized", "Please login")
 			return
 		}
-		accessToken := strings.TrimPrefix(authHeader, "Bearer ")
 
-		createdProduct, err := s.CreateProduct(c.Request.Context(), &product, accessToken, uploadFiles)
+		if !userModel.IsAdminOrSeller() {
+			utils.Unauthorized(c, "Unauthorized", "only admins and verified users are authorized ")
+			return
+		}
+		createdProduct, err := s.CreateProduct(c.Request.Context(), &product, accessToken, files, userID)
 		if err != nil {
-			logger.Error("Failed to create product", err, nil)
-			utils.InternalServerError(c, "Failed to create product", "")
+			switch {
+			case errors.Is(err, constants.ErrDuplicateSlug):
+				utils.BadRequest(c, constants.ErrDuplicateSlug.Error(), "")
+			default:
+				utils.BadRequest(c, "Failed to create product", "can't use same title twice")
+			}
 			return
 		}
 
 		utils.Created(c, "Product created successfully", createdProduct)
+	}
+}
+
+func GetProductById(s *service.ProductService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		paramId := c.Param(strings.TrimSpace("id"))
+
+		if paramId == "" {
+			utils.BadRequest(c, "product id can't be empty", "")
+			return
+		}
+
+		user, exists := c.Get("user")
+		if !exists {
+			utils.Unauthorized(c, "User not found", "")
+			return
+		}
+
+		claims, ok := user.(*models.User)
+		if !ok {
+			utils.Unauthorized(c, "User not found", "Please login")
+			return
+		}
+
+		accessToken, _ := c.Cookie("access_token")
+		parsedProductId, err := uuid.Parse(paramId)
+
+		if err != nil {
+			switch {
+			case errors.Is(err, constants.ErrInvalidID):
+				utils.BadRequest(c, constants.ErrInvalidID.Error(), "")
+			default:
+				utils.NotFound(c, "product not found", "")
+			}
+			return
+		}
+		// get product by id
+		product, err := s.GetProductById(c.Request.Context(), accessToken, parsedProductId, claims.ID)
+		if err != nil {
+			if errors.Is(err, constants.ErrNotFound) {
+				utils.NotFound(c, "product not found", "")
+				return
+			}
+			utils.BadRequest(c, "Failed to get product", "")
+			return
+		}
+
+		utils.OK(c, "product retrieved successfully", product)
+	}
+}
+
+func DeleteProduct(s *service.ProductService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		paramId := c.Param(strings.TrimSpace("id"))
+		if paramId == "" {
+			utils.BadRequest(c, "product id can't be empty", "")
+			return
+		}
+
+		user, exists := c.Get("user")
+		if !exists {
+			utils.Unauthorized(c, "User not found", "")
+			return
+		}
+
+		claims, ok := user.(*models.User)
+		if !ok {
+			utils.Unauthorized(c, "User not found", "Please login")
+			return
+		}
+
+		accessToken, _ := c.Cookie("access_token")
+		parsedProductId, err := uuid.Parse(paramId)
+
+		if err != nil {
+			switch {
+			case errors.Is(err, constants.ErrInvalidID):
+				utils.BadRequest(c, constants.ErrInvalidID.Error(), "")
+			default:
+				utils.NotFound(c, "product not found", "")
+			}
+			return
+		}
+		// get product by id
+		product, err := s.GetProductById(c.Request.Context(), accessToken, parsedProductId, claims.ID)
+		if err != nil {
+			if errors.Is(err, constants.ErrNotFound) {
+				utils.NotFound(c, "product not found", "")
+				return
+			}
+			utils.BadRequest(c, "Failed to get product", "")
+			return
+		}
+
+		if !claims.IsAdminOrOwner(product.OwnerID) {
+			utils.Unauthorized(c, "Unauthorized", "only admins and verified users are authorized ")
+			return
+		}
+
+		err = s.DeleteProduct(c.Request.Context(), accessToken, parsedProductId, claims.ID)
+		if err != nil {
+			utils.BadRequest(c, "Failed to delete product", "")
+			return
+		}
+
+		utils.DELETED(c, "product deleted successfully", nil)
 	}
 }

@@ -26,6 +26,7 @@ type Config struct {
 	SupbaseUrl         string
 	SupabaseServiceKey string
 	SupabaseAnonKey    string
+	SupabaseStorageUrl string
 	// JWT Configuration
 	JWTSecret            string
 	SupabaseJWTSecret    string
@@ -42,11 +43,11 @@ func LoadConfig() (*Config, error) {
 		CloudinaryAPIKey:    os.Getenv("CLOUDINARY_API_KEY"),
 		CloudinaryAPISecret: os.Getenv("CLOUDINARY_API_SECRET"),
 		// MongoDBPassword:     os.Getenv("MONGODB_PASSWORD"),
-		Environment:        env,
-		SupbaseUrl:         os.Getenv("SUPABASE_URL"),
-		SupabaseServiceKey: os.Getenv("SUPABASE_SERVICE_KEY"),
-		SupabaseAnonKey:    os.Getenv("SUPABASE_ANON_KEY"),
-
+		Environment:           env,
+		SupbaseUrl:            os.Getenv("SUPABASE_URL"),
+		SupabaseServiceKey:    os.Getenv("SUPABASE_SERVICE_KEY"),
+		SupabaseAnonKey:       os.Getenv("SUPABASE_ANON_KEY"),
+		SupabaseStorageUrl:    os.Getenv("SUPABASE_STORAGE_URL"),
 		LogLevel:              getEnvWithDefault("LOG_LEVEL", "info"),
 		ResendAPIKey:          os.Getenv("RESEND_API_KEY"),
 		FrontendURL:           getEnvWithDefault("FRONTEND_URL", "http://localhost:3000"),
@@ -85,6 +86,9 @@ func LoadConfig() (*Config, error) {
 	if cfg.SupbaseUrl == "" {
 		return nil, fmt.Errorf("failed to load the supabase url")
 	}
+	if cfg.SupabaseStorageUrl == "" {
+		return nil, fmt.Errorf("failed to load the supabase storage url")
+	}
 	// if cfg.MongoDBPassword == "" {
 	// 	return nil, fmt.Errorf("MONGODB_PASSWORD is required")
 	// }
@@ -102,6 +106,9 @@ func LoadConfig() (*Config, error) {
 	}
 	if len(cfg.JWTSecret) < 32 {
 		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters long")
+	}
+	if cfg.SupabaseJWTSecret == "" {
+		return nil, fmt.Errorf("SUPABASE_JWT_SECRET is required")
 	}
 
 	if cfg.ResendAPIKey == "" {

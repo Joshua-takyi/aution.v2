@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/joshua-takyi/auction/internal/jwt"
@@ -24,37 +27,36 @@ func AuthMiddleware(jwtManager *jwt.JWTManager, userService *service.UserService
 			c.Abort()
 			return
 		}
-		// Verify CSRF token
-		csrfTokenFromHeader := c.GetHeader("X-CSRF-Token")
-		csrfTokenFromCookie, err := c.Cookie("csrf_token")
-		if err != nil {
-			utils.Unauthorized(c, "CSRF token not found", "Please login")
-			c.Abort()
-			return
-		}
-
-		// Get authorization header
+		// Verify CSRF token for mutating requests only
 		methods := []string{"POST", "PATCH", "DELETE", "PUT"}
 		for _, v := range methods {
 			if c.Request.Method == v {
+				csrfTokenFromHeader := c.GetHeader("X-CSRF-Token")
+				csrfTokenFromCookie, err := c.Cookie("csrf_token")
+				if err != nil {
+					utils.Unauthorized(c, "CSRF token not found", "Please login")
+					c.Abort()
+					return
+				}
+
 				if csrfTokenFromCookie == "" || csrfTokenFromHeader == "" || csrfTokenFromCookie != csrfTokenFromHeader {
 					utils.Unauthorized(c, "Invalid CSRF token", "Please try again")
 					c.Abort()
 					return
 				}
-
+				break // Exit loop after validating for the matching method
 			}
 		}
 
 		// Verify token with Supabase secret
 		userAuth, err := jwtManager.VerifySupabaseToken(token)
 		if err != nil {
-			if err == jwt.ErrExpiredToken {
+			// validate refresh token
+			switch {
+			case errors.Is(err, jwt.ErrExpiredToken):
 				utils.Unauthorized(c, "Token has expired", "Please login again")
-			} else if err == jwt.ErrInvalidSignature {
-				utils.Unauthorized(c, "Invalid token signature", "Token has been tampered with")
-			} else {
-				utils.Unauthorized(c, "Invalid token", err.Error())
+			default:
+				utils.Unauthorized(c, "Invalid token", "Please try again")
 			}
 			c.Abort()
 			return
@@ -62,14 +64,14 @@ func AuthMiddleware(jwtManager *jwt.JWTManager, userService *service.UserService
 
 		parsedUserID, err := uuid.Parse(userAuth.ID)
 		if err != nil {
-			utils.Unauthorized(c, "Invalid user ID", "Please login")
+			utils.Unauthorized(c, "Invalid user ID", "Please try again")
 			c.Abort()
 			return
 		}
-		// get user from the ID
-		user, er := userService.GetUserById(c, parsedUserID)
-		if er != nil {
-			utils.Unauthorized(c, "User not found", "Please login")
+		user, err := userService.GetUserById(c.Request.Context(), parsedUserID, token)
+		if err != nil {
+			fmt.Printf("[AuthMiddleware] GetUserById failed for userID %s: %v\n", parsedUserID.String(), err)
+			utils.Unauthorized(c, "User not found", "Please try again")
 			c.Abort()
 			return
 		}

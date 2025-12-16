@@ -2,6 +2,7 @@ package jwt
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -59,7 +60,7 @@ func (m *JWTManager) VerifySupabaseToken(tokenString string) (*UserAuth, error) 
 		if errors.Is(err, jwt.ErrTokenExpired) {
 			return nil, ErrExpiredToken
 		}
-		return nil, ErrInvalidToken
+		return nil, fmt.Errorf("token validation failed: %w", err)
 	}
 
 	if !token.Valid {
@@ -74,7 +75,6 @@ func (m *JWTManager) VerifySupabaseToken(tokenString string) (*UserAuth, error) 
 	if !ok {
 		return nil, ErrInvalidToken
 	}
-
 	// Extract standard claims
 	userID, _ := claims["sub"].(string)
 	email, _ := claims["email"].(string)

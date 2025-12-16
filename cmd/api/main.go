@@ -38,7 +38,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	storage, err := connection.ConnectSupabaseStorage(cfg.SupbaseUrl, cfg.SupabaseAnonKey)
+	storage, err := connection.ConnectSupabaseStorage(cfg.SupabaseStorageUrl, cfg.SupabaseAnonKey)
 	if err != nil {
 		logger.Error("failed to connect to supabase storage", "error", err)
 		os.Exit(1)

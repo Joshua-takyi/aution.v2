@@ -7,6 +7,13 @@ const (
 	RoleUser  = "user"
 )
 
+const (
+	ProductDraft     = "DRAFT"
+	ProductAvailable = "AVAILABLE"
+	ProductSold      = "SOLD"
+	ProductArchived  = "ARCHIVED"
+)
+
 // Common error messages
 var (
 	ErrInvalidInput       = errors.New("invalid user input")
@@ -22,8 +29,10 @@ var (
 	ErrInvalidEmail       = errors.New("invalid email format")
 	ErrInvalidToken       = errors.New("invalid verification token")
 	ErrTokenExpired       = errors.New("verification token expired")
-
-	ErrNoClient = errors.New("no database client available")
+	ErrDuplicateSlug      = errors.New("slug already exists")
+	ErrInvalidID          = errors.New("invalid id type")
+	ErrNotFound           = errors.New("not found")
+	ErrNoClient           = errors.New("no database client available")
 )
 
 // Success messages

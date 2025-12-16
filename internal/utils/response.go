@@ -72,6 +72,14 @@ func InternalServerError(c *gin.Context, message, details string) {
 	ErrorResponse(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", message, details)
 }
 
+func DELETED(c *gin.Context, message string, data any) {
+	SuccessResponse(c, http.StatusNoContent, message, data)
+}
+
+func Error(c *gin.Context, message string, err error) {
+	ErrorResponse(c, http.StatusInternalServerError, "INTERNAL_SERVER_ERROR", message, err.Error())
+}
+
 func Created(c *gin.Context, message string, data interface{}) {
 	SuccessResponse(c, http.StatusCreated, message, data)
 }

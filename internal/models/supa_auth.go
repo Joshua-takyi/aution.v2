@@ -13,12 +13,8 @@ import (
 )
 
 func (su *SupabaseRepo) GetAuthenticatedClient(accessToken string) (*supabase.Client, error) {
-	if su.supabase == nil {
-		return nil, errors.New("supabase is nil")
-	}
-
-	if su.supabase.Auth == nil {
-		return nil, errors.New("supabase auth is nil")
+	if su.url == "" || su.anonKey == "" {
+		return su.supabase, nil
 	}
 
 	options := &supabase.ClientOptions{
@@ -30,26 +26,27 @@ func (su *SupabaseRepo) GetAuthenticatedClient(accessToken string) (*supabase.Cl
 	return supabase.NewClient(su.url, su.anonKey, options)
 }
 
-func (sr *SupabaseRepo) GetAuthenticatedUser(ctx context.Context, accessToken string) (*types.User, error) {
+func (sr *SupabaseRepo) GetAuthenticatedUser(ctx context.Context, accessToken string) *supabase.Client {
 	if accessToken == "" {
-		return nil, errors.New("access token is empty")
+		if authClient, err := sr.GetAuthenticatedClient(accessToken); err == nil && authClient != nil {
+			return authClient
+		}
 	}
-
-	// Use the auth client to get the user using the access token
-	resp, err := sr.supabase.Auth.WithToken(accessToken).GetUser()
-	if err != nil {
-		return nil, err
+	if sr.serviceClient != nil {
+		return sr.serviceClient
 	}
-	return &resp.User, nil
+	return nil
 }
 
 func (sr *SupabaseRepo) SignUp(ctx context.Context, email, password string) (*types.User, error) {
-	_, count, err := sr.supabase.From(string(constants.ProductTable)).Select("email", "", false).Eq("email", email).Execute()
+
+	_, count, err := sr.supabase.From(string(constants.ProfileTable)).Select("email", "", false).Eq("email", email).Execute()
+
 	if err != nil {
-		return nil, errors.New("failed to check if the user email exist")
+		return nil, fmt.Errorf("failed to check if the user email exist %w", err)
 	}
 	if count > 0 {
-		return nil, errors.New("user already exists")
+		return nil, constants.ErrUserAlreadyExists
 	}
 
 	resp, err := sr.supabase.Auth.Signup(types.SignupRequest{
@@ -57,7 +54,7 @@ func (sr *SupabaseRepo) SignUp(ctx context.Context, email, password string) (*ty
 		Password: password,
 	})
 	if err != nil {
-		return nil, errors.New("failed to sign up")
+		return nil, fmt.Errorf("failed to sign up %w", err)
 	}
 	return &resp.User, nil
 }
@@ -71,37 +68,31 @@ func (sr *SupabaseRepo) SignIn(ctx context.Context, email, password string) (*ty
 }
 
 func (sr *SupabaseRepo) SignOut(ctx context.Context, accessToken string) error {
-	return sr.supabase.Auth.Logout()
-}
-
-func (sr *SupabaseRepo) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
-	if sr.serviceClient == nil {
-		return nil, errors.New("service client not initialized")
-	}
-
-	// Use AdminGetUser with the service role client (Admin Request)
-	u, err := sr.serviceClient.Auth.AdminGetUser(types.AdminGetUserRequest{
-		UserID: id,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &User{
-		ID:        u.ID,
-		Email:     u.Email,
-		CreatedAt: u.CreatedAt,
-		UpdatedAt: u.UpdatedAt,
-	}, nil
-}
-
-func (sr *SupabaseRepo) GetUserByEmail(ctx context.Context, email string, accessToken string) (*User, error) {
 	var client *supabase.Client
 	var err error
 
 	if accessToken == "" {
 		if sr.serviceClient == nil {
-			return nil, errors.New("service client not initialized")
+			return fmt.Errorf("service client not initialized %w", err)
+		}
+		client = sr.serviceClient
+	} else {
+		client, err = sr.GetAuthenticatedClient(accessToken)
+		if err != nil {
+			return fmt.Errorf("failed to get authenticated client: %w", err)
+		}
+	}
+	return client.Auth.Logout()
+}
+
+func (sr *SupabaseRepo) GetUserByID(ctx context.Context, id uuid.UUID, accessToken string) (*User, error) {
+	// fmt.Printf("[SupabaseRepo] GetUserByID called for ID: %s, Token Length: %d\n", id.String(), len(accessToken))
+	var client *supabase.Client
+	var err error
+
+	if accessToken == "" {
+		if sr.serviceClient == nil {
+			return nil, fmt.Errorf("service client not initialized %w", err)
 		}
 		client = sr.serviceClient
 	} else {
@@ -111,7 +102,50 @@ func (sr *SupabaseRepo) GetUserByEmail(ctx context.Context, email string, access
 		}
 	}
 
-	var results []map[string]interface{}
+	var results []map[string]any
+	// Debug log before execution
+	// fmt.Println("[SupabaseRepo] Executing query for profile...")
+	_, err = client.From(string(constants.ProfileTable)).Select("email, id, username, full_name, role,avatar_url, created_at, updated_at", "exact", false).Eq("id", id.String()).ExecuteTo(&results)
+	if err != nil {
+		// fmt.Printf("[SupabaseRepo] Error querying profile: %v\n", err)
+		return nil, fmt.Errorf("failed to get user by id: %w", err)
+	}
+
+	// fmt.Printf("[SupabaseRepo] Query success. Results found: %d\n", len(results))
+
+	if len(results) == 0 {
+		// fmt.Println("[SupabaseRepo] No profile found for this ID.")
+		return nil, constants.ErrUserNotFound
+	}
+
+	jsonBody, err := json.Marshal(results[0])
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal user data: %w", err)
+	}
+	var u User
+	if err := json.Unmarshal(jsonBody, &u); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal user data to struct: %w", err)
+	}
+	return &u, nil
+}
+
+func (sr *SupabaseRepo) GetUserByEmail(ctx context.Context, email string, accessToken string) (*User, error) {
+	var client *supabase.Client
+	var err error
+
+	if accessToken == "" {
+		if sr.serviceClient == nil {
+			return nil, fmt.Errorf("service client not initialized %w", err)
+		}
+		client = sr.serviceClient
+	} else {
+		client, err = sr.GetAuthenticatedClient(accessToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get authenticated client: %w", err)
+		}
+	}
+
+	var results []map[string]any
 	_, err = client.From(string(constants.ProfileTable)).Select("email", "exact", false).Eq("email", email).ExecuteTo(&results)
 
 	if err != nil {
@@ -119,7 +153,7 @@ func (sr *SupabaseRepo) GetUserByEmail(ctx context.Context, email string, access
 	}
 
 	if len(results) == 0 {
-		return nil, fmt.Errorf("user not found %w", constants.ErrUserNotFound)
+		return nil, fmt.Errorf("user not found %w", err)
 	}
 
 	// Marshal the first result to User struct
@@ -134,4 +168,8 @@ func (sr *SupabaseRepo) GetUserByEmail(ctx context.Context, email string, access
 		return nil, fmt.Errorf("failed to unmarshal user data to struct: %w", err)
 	}
 	return &u, nil
+}
+
+func (sr *SupabaseRepo) RefreshToken(ctx context.Context, refreshToken string) (*types.TokenResponse, error) {
+	return sr.supabase.Auth.RefreshToken(refreshToken)
 }

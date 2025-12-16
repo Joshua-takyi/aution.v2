@@ -118,11 +118,53 @@ func AuthenticateUserHandler(s *service.UserService, logger *utils.Logger, isPro
 			return
 		}
 		// save cookies
-		c.SetCookie("access_token", tokenResponse.AccessToken, int(tokenResponse.ExpiresIn), "/", "", false, true)
-		c.SetCookie("refresh_token", tokenResponse.RefreshToken, int(tokenResponse.ExpiresIn), "/", "", false, true)
-		c.SetCookie("csrf_token", csrf, int(tokenResponse.ExpiresIn), "/", "", false, true)
+		c.SetCookie("access_token", tokenResponse.AccessToken, int(tokenResponse.ExpiresIn), "/", "", isProduction, true)
+		c.SetCookie("refresh_token", tokenResponse.RefreshToken, 30*24*60*60, "/", "", isProduction, true)
+		c.SetCookie("csrf_token", csrf, int(tokenResponse.ExpiresIn), "/", "", isProduction, false)
 
 		// Return the full Supabase token response (Access Token, Refresh Token, User, etc.)
+		utils.StatusOK(c, constants.MsgLoginSuccess, tokenResponse)
+	}
+}
+
+func SignOut(s *service.UserService, isProduction bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		accessToken, err := c.Cookie("access_token")
+		if err == nil {
+			_ = s.SignOut(c.Request.Context(), accessToken)
+		}
+
+		c.SetCookie("access_token", "", -1, "/", "", isProduction, true)
+		c.SetCookie("refresh_token", "", -1, "/", "", isProduction, true)
+		c.SetCookie("csrf_token", "", -1, "/", "", isProduction, false)
+
+		utils.StatusOK(c, constants.MsgLogoutSuccess, nil)
+	}
+}
+
+func RefreshToken(s *service.UserService, isProduction bool) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		refresh_token, err := c.Cookie("refresh_token")
+		if err != nil {
+			utils.BadRequest(c, "Refresh token is required", "Please try again later")
+			return
+		}
+
+		tokenResponse, err := s.RefreshToken(c.Request.Context(), refresh_token)
+		if err != nil {
+			utils.BadRequest(c, err.Error(), "Please try again later")
+			return
+		}
+
+		csrf, err := helpers.GenerateCsrfToken()
+		if err != nil {
+			utils.InternalServerError(c, "Failed to generate CSRF token", "Please try again later")
+			return
+		}
+		// set new TOkens
+		c.SetCookie("access_token", tokenResponse.AccessToken, int(tokenResponse.ExpiresIn), "/", "", isProduction, true)
+		c.SetCookie("refresh_token", tokenResponse.RefreshToken, 30*24*60*60, "/", "", isProduction, true)
+		c.SetCookie("csrf_token", csrf, int(tokenResponse.ExpiresIn), "/", "", isProduction, false)
 		utils.StatusOK(c, constants.MsgLoginSuccess, tokenResponse)
 	}
 }

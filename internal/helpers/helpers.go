@@ -57,14 +57,11 @@ func ValidateProductInput(product *models.Product) error {
 		return errors.New("description is required")
 	}
 
-	if product.Price <= 0 {
-		return errors.New("price must be greater than 0")
-	}
 	if len(product.Images) == 0 {
 		return errors.New("images are required")
 	}
-	if len(product.Details) == 0 {
-		return errors.New("details are required")
+	if len(product.Specs) == 0 {
+		return errors.New("specs are required")
 	}
 	return nil
 }

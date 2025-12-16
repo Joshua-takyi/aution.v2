@@ -25,7 +25,7 @@ func SetupRoutes(c *container.Container, cfg *config.Config) *gin.Engine {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins:     cfg.AllowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Request-ID", "X-CSRF-Token"},
 		ExposeHeaders:    []string{"Content-Length"},
 		AllowCredentials: true,
 	}))
@@ -34,7 +34,6 @@ func SetupRoutes(c *container.Container, cfg *config.Config) *gin.Engine {
 	// Apply custom middleware with injected logger
 	r.Use(middleware.ErrorHandler(logger))
 	r.Use(middleware.RequestLogger(logger))
-	// r.Use(middleware.CORS())
 	r.Use(gin.Recovery())
 
 	// API v1 routes
@@ -48,19 +47,33 @@ func SetupRoutes(c *container.Container, cfg *config.Config) *gin.Engine {
 			})
 		})
 
-		// User routes
-		users := v1.Group("/users")
+		// --- Public Routes ---
+
+		// Auth & User Registration (Public)
+		v1.POST("/users", handlers.CreateUserHandler(c.UserService, logger))
+		v1.POST("/users/login", handlers.AuthenticateUserHandler(c.UserService, logger, c.IsProduction))
+		v1.POST("/auth/refresh", handlers.RefreshToken(c.UserService, c.IsProduction))
+
+		// --- Protected Routes (Require Auth) ---
+
+		// Protected grouping
+		protected := v1.Group("/")
+		protected.Use(middleware.AuthMiddleware(c.JWTManager, c.UserService))
+
+		// User Protected Routes
+		userRoutes := protected.Group("/users")
 		{
-			users.POST("", handlers.CreateUserHandler(c.UserService, logger))
-			users.POST("/login", handlers.AuthenticateUserHandler(c.UserService, logger, c.IsProduction))
-			// users.GET("/", handlers.GetUsersHandler(c.UserService, logger)) // Commenting out if not verified present
-			// users.GET("/verify", handlers.VerifyUserHandler(c.UserService, logger)) // Removed
+			userRoutes.GET("/", handlers.GetUserHandler())
+			userRoutes.GET("/profile", handlers.GetProfileHandler(c.UserService))
+			userRoutes.POST("/auth/signout", handlers.SignOut(c.UserService, c.IsProduction))
 		}
 
-		// Product routes
-		products := v1.Group("/products")
+		// Product Protected Routes
+		productRoutes := protected.Group("/products")
 		{
-			products.POST("", handlers.CreateProductHandler(c.ProductService, logger))
+			productRoutes.POST("", handlers.CreateProductHandler(c.ProductService, logger))
+			productRoutes.GET("/:id", handlers.GetProductById(c.ProductService))
+			productRoutes.DELETE("/:id", handlers.DeleteProduct(c.ProductService))
 		}
 	}
 
