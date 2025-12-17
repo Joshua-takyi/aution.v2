@@ -53,6 +53,7 @@ func SetupRoutes(c *container.Container, cfg *config.Config) *gin.Engine {
 		v1.POST("/users", handlers.CreateUserHandler(c.UserService, logger))
 		v1.POST("/users/login", handlers.AuthenticateUserHandler(c.UserService, logger, c.IsProduction))
 		v1.POST("/auth/refresh", handlers.RefreshToken(c.UserService, c.IsProduction))
+		v1.GET("/auctions/:id", handlers.GetAuctionByIdHandler(c.AuctionService))
 
 		// --- Protected Routes (Require Auth) ---
 
@@ -74,6 +75,13 @@ func SetupRoutes(c *container.Container, cfg *config.Config) *gin.Engine {
 			productRoutes.POST("", handlers.CreateProductHandler(c.ProductService, logger))
 			productRoutes.GET("/:id", handlers.GetProductById(c.ProductService))
 			productRoutes.DELETE("/:id", handlers.DeleteProduct(c.ProductService))
+		}
+
+		// Auction Protected Routes
+		auctionRoutes := protected.Group("/auctions")
+		{
+			auctionRoutes.POST("/:id", handlers.CreateAuctionHandler(c.AuctionService))
+			auctionRoutes.DELETE("/:id", handlers.DeleteAuctionHandler(c.AuctionService))
 		}
 	}
 

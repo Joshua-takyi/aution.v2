@@ -26,28 +26,28 @@ type Product struct {
 	UpdatedAt   time.Time        `db:"updated_at" json:"updated_at"`
 }
 
+// get product with status active
+func (p *Product) ApproveProduct() {
+	p.Status = constants.ProductApproved
+}
+
+// check if the product is not sold
+func (p *Product) CheckIfProductIsNotSold() bool {
+	return p.Status != constants.ProductSold
+}
+
 type ProductInterface interface {
 	CreateProduct(ctx context.Context, product *Product, accessToken string, userID uuid.UUID) (*Product, error)
-	GetProductById(ctx context.Context, accessToken string, productID, ownerID uuid.UUID) (*Product, error)
+	GetProductById(ctx context.Context, accessToken string, productID uuid.UUID) (*Product, error)
 	UpdateProduct(ctx context.Context, product map[string]any, accessToken string, productID uuid.UUID) (*Product, error)
-	DeleteProduct(ctx context.Context, accessToken string, productID, ownerID uuid.UUID) error
+	DeleteProduct(ctx context.Context, accessToken string, productID uuid.UUID) error
 }
 
 func (sr *SupabaseRepo) CreateProduct(ctx context.Context, product *Product, accessToken string, userID uuid.UUID) (*Product, error) {
 
-	var client *supabase.Client
-	var err error
-
-	if accessToken == "" {
-		if sr.serviceClient == nil {
-			return nil, fmt.Errorf("service client not initialized %w", err)
-		}
-		client = sr.serviceClient
-	} else {
-		client, err = sr.GetAuthenticatedClient(accessToken)
-		if err != nil {
-			return nil, err
-		}
+	client, err := sr.GetAuthenticatedClient(accessToken)
+	if err != nil {
+		return nil, err
 	}
 	// fmt.Printf("[DB] Inserting product into table: %s\n", constants.ProductTable)
 	// fmt.Printf("[DB] Product data: ID=%s, Title=%s, Images=%d, OwnerID=%s\n",
@@ -110,7 +110,7 @@ func (sr *SupabaseRepo) UpdateProduct(ctx context.Context, product map[string]an
 
 }
 
-func (sr *SupabaseRepo) DeleteProduct(ctx context.Context, accessToken string, productID, ownerID uuid.UUID) error {
+func (sr *SupabaseRepo) DeleteProduct(ctx context.Context, accessToken string, productID uuid.UUID) error {
 	var client *supabase.Client
 	var err error
 
@@ -126,7 +126,7 @@ func (sr *SupabaseRepo) DeleteProduct(ctx context.Context, accessToken string, p
 		}
 	}
 
-	_, count, err := client.From(string(constants.ProductTable)).Delete("", "exact").Eq("id", productID.String()).Eq("owner_id", ownerID.String()).Execute()
+	_, count, err := client.From(string(constants.ProductTable)).Delete("", "exact").Eq("id", productID.String()).Execute()
 	if err != nil {
 		return fmt.Errorf("failed to delete product: %w", err)
 	}
@@ -146,7 +146,7 @@ func contains(slice []string, item string) bool {
 	return false
 }
 
-func (sr *SupabaseRepo) GetProductById(ctx context.Context, accessToken string, productId uuid.UUID, ownerID uuid.UUID) (*Product, error) {
+func (sr *SupabaseRepo) GetProductById(ctx context.Context, accessToken string, productId uuid.UUID) (*Product, error) {
 	var client *supabase.Client
 	var err error
 
@@ -162,7 +162,7 @@ func (sr *SupabaseRepo) GetProductById(ctx context.Context, accessToken string, 
 		}
 	}
 
-	byteData, count, err := client.From(string(constants.ProductTable)).Select("*", "exact", false).Eq("id", productId.String()).Eq("owner_id", ownerID.String()).Execute()
+	byteData, count, err := client.From(string(constants.ProductTable)).Select("*", "exact", false).Eq("id", productId.String()).Execute()
 
 	if err != nil {
 		return nil, constants.ErrNoClient

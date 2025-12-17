@@ -124,7 +124,7 @@ func (s *ProductService) CreateProduct(ctx context.Context, product *models.Prod
 	product.CreatedAt = now
 	product.UpdatedAt = now
 	product.Slug = helpers.GenerateSlug(product.Title, product.Category)
-	product.Status = constants.ProductDraft
+	product.Status = constants.ProductPendingReview
 	product.OwnerID = userID
 	// fmt.Printf("[ProductService] Product prepared: ID=%s, Title=%s, Images=%d\n", product.ID, product.Title, len(product.Images))
 
@@ -155,14 +155,14 @@ func (s *ProductService) UpdateProduct(ctx context.Context, product map[string]a
 	return s.productRepo.UpdateProduct(ctx, product, accessToken, productID)
 }
 
-func (s *ProductService) DeleteProduct(ctx context.Context, accessToken string, productID uuid.UUID, ownerID uuid.UUID) error {
-	return s.productRepo.DeleteProduct(ctx, accessToken, productID, ownerID)
+func (s *ProductService) DeleteProduct(ctx context.Context, accessToken string, productID uuid.UUID) error {
+	return s.productRepo.DeleteProduct(ctx, accessToken, productID)
 }
 
-func (s *ProductService) GetProductById(ctx context.Context, accessToken string, productID uuid.UUID, ownerID uuid.UUID) (*models.Product, error) {
+func (s *ProductService) GetProductById(ctx context.Context, accessToken string, productID uuid.UUID) (*models.Product, error) {
 	if productID == uuid.Nil {
 		return nil, constants.ErrInvalidID
 	}
 
-	return s.productRepo.GetProductById(ctx, accessToken, productID, ownerID)
+	return s.productRepo.GetProductById(ctx, accessToken, productID)
 }

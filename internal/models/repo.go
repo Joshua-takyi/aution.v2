@@ -1,6 +1,7 @@
 package models
 
 import (
+	"github.com/go-playground/validator/v10"
 	storage_go "github.com/supabase-community/storage-go"
 	"github.com/supabase-community/supabase-go"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -9,6 +10,8 @@ import (
 type MongodbRepo struct {
 	mongodb *mongo.Client
 }
+
+var Validate = validator.New(validator.WithRequiredStructEnabled())
 
 func MongodbNewRepo(client *mongo.Client) (*MongodbRepo, error) {
 	return &MongodbRepo{

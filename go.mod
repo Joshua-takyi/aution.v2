@@ -10,6 +10,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
 	github.com/resend/resend-go/v3 v3.0.0
+	github.com/shopspring/decimal v1.4.0
 	github.com/supabase-community/gotrue-go v1.2.0
 	github.com/supabase-community/storage-go v0.8.1
 	github.com/supabase-community/supabase-go v0.0.4

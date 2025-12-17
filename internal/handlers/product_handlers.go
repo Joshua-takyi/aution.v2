@@ -96,7 +96,7 @@ func GetProductById(s *service.ProductService) gin.HandlerFunc {
 			return
 		}
 
-		claims, ok := user.(*models.User)
+		_, ok := user.(*models.User)
 		if !ok {
 			utils.Unauthorized(c, "User not found", "Please login")
 			return
@@ -114,8 +114,9 @@ func GetProductById(s *service.ProductService) gin.HandlerFunc {
 			}
 			return
 		}
+
 		// get product by id
-		product, err := s.GetProductById(c.Request.Context(), accessToken, parsedProductId, claims.ID)
+		product, err := s.GetProductById(c.Request.Context(), accessToken, parsedProductId)
 		if err != nil {
 			if errors.Is(err, constants.ErrNotFound) {
 				utils.NotFound(c, "product not found", "")
@@ -143,7 +144,7 @@ func DeleteProduct(s *service.ProductService) gin.HandlerFunc {
 			return
 		}
 
-		claims, ok := user.(*models.User)
+		_, ok := user.(*models.User)
 		if !ok {
 			utils.Unauthorized(c, "User not found", "Please login")
 			return
@@ -161,25 +162,13 @@ func DeleteProduct(s *service.ProductService) gin.HandlerFunc {
 			}
 			return
 		}
-		// get product by id
-		product, err := s.GetProductById(c.Request.Context(), accessToken, parsedProductId, claims.ID)
-		if err != nil {
-			if errors.Is(err, constants.ErrNotFound) {
-				utils.NotFound(c, "product not found", "")
-				return
-			}
-			utils.BadRequest(c, "Failed to get product", "")
-			return
-		}
 
-		if !claims.IsAdminOrOwner(product.OwnerID) {
-			utils.Unauthorized(c, "Unauthorized", "only admins and verified users are authorized ")
-			return
-		}
-
-		err = s.DeleteProduct(c.Request.Context(), accessToken, parsedProductId, claims.ID)
+		// Optimization: Removing redundant GetProductById.
+		// We rely on RLS and the Delete operation result.
+		err = s.DeleteProduct(c.Request.Context(), accessToken, parsedProductId)
 		if err != nil {
-			utils.BadRequest(c, "Failed to delete product", "")
+			// Check specific errors if needed, e.g. "0 rows deleted" -> NotFound/Unauthorized
+			utils.BadRequest(c, "Failed to delete product or unauthorized", err.Error())
 			return
 		}
 
