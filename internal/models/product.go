@@ -36,11 +36,17 @@ func (p *Product) CheckIfProductIsNotSold() bool {
 	return p.Status != constants.ProductSold
 }
 
+type ProductResponse struct {
+	Product
+	Auction `json:"auctions"`
+}
 type ProductInterface interface {
 	CreateProduct(ctx context.Context, product *Product, accessToken string, userID uuid.UUID) (*Product, error)
 	GetProductById(ctx context.Context, accessToken string, productID uuid.UUID) (*Product, error)
 	UpdateProduct(ctx context.Context, product map[string]any, accessToken string, productID uuid.UUID) (*Product, error)
 	DeleteProduct(ctx context.Context, accessToken string, productID uuid.UUID) error
+	GetProductWithAuction(ctx context.Context, productID uuid.UUID) (*ProductResponse, error)
+	GetProductsByOwner(ctx context.Context, accessToken string, ownerID uuid.UUID, limit, offset int) ([]*Product, int64, error)
 }
 
 func (sr *SupabaseRepo) CreateProduct(ctx context.Context, product *Product, accessToken string, userID uuid.UUID) (*Product, error) {
@@ -176,4 +182,48 @@ func (sr *SupabaseRepo) GetProductById(ctx context.Context, accessToken string, 
 		return nil, constants.ErrInternalServer
 	}
 	return &p[0], nil
+}
+
+func (sr *SupabaseRepo) GetProductWithAuction(ctx context.Context, productID uuid.UUID) (*ProductResponse, error) {
+	byteData, count, err := sr.supabase.From(string(constants.ProductTable)).Select("*, auctions(*)", "exact", false).Eq("id", productID.String()).Execute()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get product data %w", err)
+	}
+	if count == 0 {
+		return nil, constants.ErrNoData
+	}
+
+	var res []*ProductResponse
+	if err := json.Unmarshal(byteData, &res); err != nil {
+		return nil, fmt.Errorf("failed to parse request to json %w", err)
+	}
+	return res[0], nil
+
+}
+func (sr *SupabaseRepo) GetProductsByOwner(ctx context.Context, accessToken string, ownerID uuid.UUID, limit, offset int) ([]*Product, int64, error) {
+	client, err := sr.GetAuthenticatedClient(accessToken)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	byteData, count, err := client.From(string(constants.ProductTable)).
+		Select("*", "exact", false).
+		Eq("owner_id", ownerID.String()).
+		Range(offset, offset+limit-1, "").
+		Execute()
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get products by owner: %w", err)
+	}
+
+	if count == 0 {
+		return []*Product{}, 0, nil
+	}
+
+	var p []*Product
+	if err := json.Unmarshal(byteData, &p); err != nil {
+		return nil, 0, fmt.Errorf("failed to unmarshal products: %w", err)
+	}
+
+	return p, count, nil
 }

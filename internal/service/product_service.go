@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"mime/multipart"
+	"strings"
 	"sync"
 	"time"
 
@@ -39,7 +40,7 @@ func (s *ProductService) CreateProduct(ctx context.Context, product *models.Prod
 
 	// 1. Upload images concurrently
 	// fmt.Printf("[ProductService] Starting concurrent upload of %d images...\n", len(files))
-	imageUrls := make([]string, len(files))
+	imageUrls := make([]string, 0, len(files))
 	publicIdChan := make(chan string, len(files))
 	imageChan := make(chan string, len(files))
 	uploadedPaths := make([]string, 0, len(files))
@@ -117,10 +118,15 @@ func (s *ProductService) CreateProduct(ctx context.Context, product *models.Prod
 	// fmt.Println("[ProductService] Preparing product for database insertion...")
 	if product.ID == uuid.Nil {
 		product.ID = uuid.New()
-		// fmt.Printf("[ProductService] Generated new product ID: %s\n", product.ID)
 	}
 	now := time.Now()
-	product.Images = imageUrls
+	cleanedImages := make([]string, 0, len(imageUrls))
+	for _, img := range imageUrls {
+		if strings.TrimSpace(img) != "" {
+			cleanedImages = append(cleanedImages, img)
+		}
+	}
+	product.Images = cleanedImages
 	product.CreatedAt = now
 	product.UpdatedAt = now
 	product.Slug = helpers.GenerateSlug(product.Title, product.Category)
@@ -165,4 +171,14 @@ func (s *ProductService) GetProductById(ctx context.Context, accessToken string,
 	}
 
 	return s.productRepo.GetProductById(ctx, accessToken, productID)
+}
+
+func (s *ProductService) GetProductWithAuction(ctx context.Context, productID uuid.UUID) (*models.ProductResponse, error) {
+	if productID == uuid.Nil {
+		return nil, constants.ErrInvalidID
+	}
+	return s.productRepo.GetProductWithAuction(ctx, productID)
+}
+func (s *ProductService) GetProductsByOwner(ctx context.Context, accessToken string, ownerID uuid.UUID, limit, offset int) ([]*models.Product, int64, error) {
+	return s.productRepo.GetProductsByOwner(ctx, accessToken, ownerID, limit, offset)
 }

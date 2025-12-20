@@ -61,20 +61,20 @@ func (s *AuctionService) CreateAuction(ctx context.Context, auction *models.Auct
 
 	fmt.Printf("[AuctionService] checking if product %s already have an existing and active auction\n", productID)
 
-	returnedAuction, err := s.auctionRepo.GetAuctionsByProductID(ctx, accessToken, productID, 1, 0)
-	if err != nil {
-		if err == constants.ErrNoData {
-			// No active auction found, which is what we want
-			fmt.Printf("[AuctionService] No active auction found for product %s, proceeding...\n", productID)
-		} else {
-			// Real error occurred
-			fmt.Printf("[AuctionService] Failed to check for active auctions: %v\n", err)
-			return nil, fmt.Errorf("failed to check for active auction: %w", err)
-		}
-	}
-	if returnedAuction != nil {
-		return nil, constants.ErrProductHasActiveAuction
-	}
+	// returnedAuction, err := s.auctionRepo.GetAuctionsByProductID(ctx, accessToken, productID, 1, 0)
+	// if err != nil {
+	// 	if err == constants.ErrNoData {
+	// 		// No active auction found, which is what we want
+	// 		fmt.Printf("[AuctionService] No active auction found for product %s, proceeding...\n", productID)
+	// 	} else {
+	// 		// Real error occurred
+	// 		fmt.Printf("[AuctionService] Failed to check for active auctions: %v\n", err)
+	// 		return nil, fmt.Errorf("failed to check for active auction: %w", err)
+	// 	}
+	// }
+	// if len(returnedAuction) > 0 {
+	// 	return nil, constants.ErrProductHasActiveAuction
+	// }
 
 	// check if the product doesn't have an active auction
 	activeAuction, err := s.auctionRepo.GetActiveAuctionByProductID(ctx, accessToken, productID)
@@ -145,4 +145,49 @@ func (s *AuctionService) GetAuctionById(ctx context.Context, auctionID uuid.UUID
 	}
 	// auction.Auction.ReservePrice = &decimal.Decimal{}
 	return auction, nil
+}
+
+func (s *AuctionService) ListAuctions(ctx context.Context, limit, offset int) ([]*models.AuctionResponse, int64, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return s.auctionRepo.ListAuctions(ctx, limit, offset)
+}
+
+func (s *AuctionService) SearchAuctions(ctx context.Context, query string, limit, offset int) ([]*models.AuctionResponse, int64, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return s.auctionRepo.SearchAuctions(ctx, query, limit, offset)
+}
+
+func (s *AuctionService) FilterAuctions(ctx context.Context, filter models.AuctionFilter, limit, offset int) ([]*models.AuctionResponse, int64, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	return s.auctionRepo.FilterAuctions(ctx, filter, limit, offset)
+}
+
+func (s *AuctionService) UpdateAuctionStatuses(ctx context.Context) (map[string]any, error) {
+	return s.auctionRepo.UpdateAuctionStatuses(ctx)
+}
+
+func (s *AuctionService) Recommendation(ctx context.Context, category string, currentID string, limit, offset int) ([]*models.AuctionResponse, int64, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	return s.auctionRepo.Recommendation(ctx, category, currentID, limit, offset)
 }

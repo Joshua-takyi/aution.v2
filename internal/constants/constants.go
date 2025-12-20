@@ -46,6 +46,10 @@ var (
 	ErrNoData                  = errors.New("no data found")
 	ErrLiveAuction             = errors.New("auction is live")
 	ErrProductHasActiveAuction = errors.New("product has an active auction")
+	ErrBidTooLow               = errors.New("bid amount is too low")
+	ErrAuctionNotLive          = errors.New("auction is not live")
+	ErrBidOnOwnAuction         = errors.New("cannot bid on your own auction")
+	ErrAuctionEnded            = errors.New("auction has already ended")
 )
 
 // Success messages

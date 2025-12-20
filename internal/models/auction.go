@@ -35,6 +35,14 @@ type AuctionResponse struct {
 	Product Product `json:"products"`
 }
 
+type AuctionFilter struct {
+	Category string   `form:"category"`
+	MinPrice *float64 `form:"min_price"`
+	MaxPrice *float64 `form:"max_price"`
+	Status   string   `form:"status"`
+	SortBy   string   `form:"sort_by"`
+}
+
 // calculateDuration is to calculate the duration of the auction
 func (a *Auction) CalculateDuration() time.Duration {
 	return a.EndTime.Sub(a.StartTime)
@@ -53,10 +61,15 @@ func (a *Auction) CalculateRemainingTime() time.Duration {
 type AuctionInterface interface {
 	CreateAuction(ctx context.Context, auction *Auction, accessToken string, productID uuid.UUID) (*Auction, error)
 	UpdateAuction(ctx context.Context, auction map[string]any, accessToken string, auctionID uuid.UUID) (*Auction, error)
+	ListAuctions(ctx context.Context, limit, offset int) ([]*AuctionResponse, int64, error)
 	DeleteAuction(ctx context.Context, accessToken string, auctionID uuid.UUID) (string, error)
 	GetActiveAuctionByProductID(ctx context.Context, accessToken string, productID uuid.UUID) (*Auction, error)
 	GetAuctionById(ctx context.Context, auctionID uuid.UUID) (*AuctionResponse, error)
 	GetAuctionsByProductID(ctx context.Context, accessToken string, productID uuid.UUID, limit, offset int) ([]*Auction, error)
+	Recommendation(ctx context.Context, category string, currentID string, limit, offset int) ([]*AuctionResponse, int64, error)
+	SearchAuctions(ctx context.Context, query string, limit, offset int) ([]*AuctionResponse, int64, error)
+	FilterAuctions(ctx context.Context, filter AuctionFilter, limit, offset int) ([]*AuctionResponse, int64, error)
+	UpdateAuctionStatuses(ctx context.Context) (map[string]any, error)
 }
 
 func (sr *SupabaseRepo) CreateAuction(ctx context.Context, auction *Auction, accessToken string, productID uuid.UUID) (*Auction, error) {
@@ -168,4 +181,154 @@ func (sr *SupabaseRepo) GetActiveAuctionByProductID(ctx context.Context, accessT
 		return nil, fmt.Errorf("failed to unmarshal active auction: %w", err)
 	}
 	return a[0], nil
+}
+
+func (sr *SupabaseRepo) ListAuctions(ctx context.Context, limit, offset int) ([]*AuctionResponse, int64, error) {
+	byteData, count, err := sr.supabase.From(string(constants.AuctionTable)).
+		Select("*, products(*)", "exact", false).Limit(limit, "").
+		Range(offset, offset+limit-1, "").
+		Execute()
+
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get auctions: %w", err)
+	}
+	if count == 0 {
+		return nil, 0, constants.ErrNoData
+	}
+
+	var response []*AuctionResponse
+	if err := json.Unmarshal(byteData, &response); err != nil {
+		return nil, 0, fmt.Errorf("failed to unmarshal auctions: %w", err)
+	}
+
+	return response, count, nil
+}
+
+func (sr *SupabaseRepo) SearchAuctions(ctx context.Context, query string, limit, offset int) ([]*AuctionResponse, int64, error) {
+	params := map[string]any{
+		"query_text": query,
+		"p_limit":    limit,
+		"p_offset":   offset,
+	}
+
+	byteData, _, err := sr.supabase.From("rpc/search_auctions").Insert(params, false, "", "", "exact").Execute()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to search auctions: %w", err)
+	}
+
+	if len(byteData) == 0 || string(byteData) == "[]" || string(byteData) == "null" {
+		return nil, 0, constants.ErrNoData
+	}
+
+	type searchResult struct {
+		AuctionData json.RawMessage `json:"auction_data"`
+		TotalCount  int64           `json:"total_count"`
+	}
+
+	var results []searchResult
+	if err := json.Unmarshal(byteData, &results); err != nil {
+		return nil, 0, fmt.Errorf("failed to unmarshal search results: %w", err)
+	}
+
+	if len(results) == 0 {
+		return nil, 0, constants.ErrNoData
+	}
+
+	var finalResponse []*AuctionResponse
+	for _, res := range results {
+		var auctionResp AuctionResponse
+		if err := json.Unmarshal(res.AuctionData, &auctionResp); err != nil {
+			return nil, 0, fmt.Errorf("failed to unmarshal auction data: %w", err)
+		}
+		finalResponse = append(finalResponse, &auctionResp)
+	}
+
+	return finalResponse, results[0].TotalCount, nil
+}
+
+func (sr *SupabaseRepo) FilterAuctions(ctx context.Context, filter AuctionFilter, limit, offset int) ([]*AuctionResponse, int64, error) {
+	params := map[string]any{
+		"p_category":  filter.Category,
+		"p_min_price": filter.MinPrice,
+		"p_max_price": filter.MaxPrice,
+		"p_status":    filter.Status,
+		"p_sort_by":   filter.SortBy,
+		"p_limit":     limit,
+		"p_offset":    offset,
+	}
+
+	byteData, _, err := sr.supabase.From("rpc/filter_auctions").Insert(params, false, "", "", "exact").Execute()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to filter auctions: %w", err)
+	}
+
+	if len(byteData) == 0 || string(byteData) == "[]" || string(byteData) == "null" {
+		return nil, 0, constants.ErrNoData
+	}
+
+	type searchResult struct {
+		AuctionData json.RawMessage `json:"auction_data"`
+		TotalCount  int64           `json:"total_count"`
+	}
+
+	var results []searchResult
+	if err := json.Unmarshal(byteData, &results); err != nil {
+		return nil, 0, fmt.Errorf("failed to unmarshal filter results: %w", err)
+	}
+
+	if len(results) == 0 {
+		return nil, 0, constants.ErrNoData
+	}
+
+	var finalResponse []*AuctionResponse
+	for _, res := range results {
+		var auctionResp AuctionResponse
+		if err := json.Unmarshal(res.AuctionData, &auctionResp); err != nil {
+			return nil, 0, fmt.Errorf("failed to unmarshal auction data: %w", err)
+		}
+		finalResponse = append(finalResponse, &auctionResp)
+	}
+
+	return finalResponse, results[0].TotalCount, nil
+}
+
+func (sr *SupabaseRepo) UpdateAuctionStatuses(ctx context.Context) (map[string]any, error) {
+	// Call the RPC without any arguments
+	res, _, err := sr.supabase.From("rpc/update_auction_statuses").Insert(map[string]any{}, false, "", "", "exact").Execute()
+	if err != nil {
+		return nil, fmt.Errorf("failed to call update_auction_statuses rpc: %w", err)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal([]byte(res), &result); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal rpc result: %w", err)
+	}
+
+	return result, nil
+}
+
+func (sr *SupabaseRepo) Recommendation(ctx context.Context, category string, currentID string, limit, offset int) ([]*AuctionResponse, int64, error) {
+	query := sr.supabase.From(string(constants.AuctionTable)).
+		Select("*, products!inner(*)", "exact", false).
+		Ilike("products.category", category)
+
+	if currentID != "" {
+		query = query.Neq("id", currentID)
+	}
+
+	byteData, count, err := query.Range(offset, offset+limit-1, "").Execute()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to load items: %w", err)
+	}
+
+	if count == 0 {
+		return nil, 0, constants.ErrNoData
+	}
+
+	var data []*AuctionResponse
+	if err := json.Unmarshal(byteData, &data); err != nil {
+		return nil, 0, fmt.Errorf("failed to parse byte to json: %w", err)
+	}
+
+	return data, count, nil
 }

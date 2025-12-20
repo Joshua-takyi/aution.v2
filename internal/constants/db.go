@@ -7,7 +7,6 @@ const (
 	ProductTable DbConstants = "products"
 	UserTable    DbConstants = "users"
 	ProfileTable DbConstants = "profiles"
-	// RefreshTokenTable DbConstants = "refresh_tokens"
-	// VerificationTable DbConstants = "verifications"
 	AuctionTable DbConstants = "auctions"
+	BidTable     DbConstants = "bids"
 )

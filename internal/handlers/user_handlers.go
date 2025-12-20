@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/joshua-takyi/auction/internal/constants"
 	"github.com/joshua-takyi/auction/internal/helpers"
+	"github.com/joshua-takyi/auction/internal/models"
 	"github.com/joshua-takyi/auction/internal/service"
 	"github.com/joshua-takyi/auction/internal/utils"
 )
@@ -167,4 +168,48 @@ func RefreshToken(s *service.UserService, isProduction bool) gin.HandlerFunc {
 		c.SetCookie("csrf_token", csrf, int(tokenResponse.ExpiresIn), "/", "", isProduction, false)
 		utils.StatusOK(c, constants.MsgLoginSuccess, tokenResponse)
 	}
+}
+
+func CreateProfileDataHandler(s *service.UserService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, exist := c.Get("user")
+		if !exist {
+			utils.Unauthorized(c, "unauthenticated user", "error")
+			return
+		}
+		claims, ok := user.(*models.User)
+		if !ok {
+			utils.Unauthorized(c, "unauthorized access", "error")
+			return
+		}
+
+		var requestBody models.Profile
+
+		if err := c.ShouldBindJSON(&requestBody); err != nil {
+			utils.BadRequest(c, "invalid request body", "error")
+			return
+		}
+
+		access_token, err := c.Cookie("access_token")
+		if err != nil {
+			token := c.GetHeader("Authorization")
+			if len(token) > 7 && token[:7] == "Bearer " {
+				access_token = token[7:]
+			} else {
+				access_token = token
+			}
+		}
+		if !claims.IsOwner(claims.ID) {
+			utils.Unauthorized(c, "unauthorized access", "error")
+			return
+		}
+
+		res, err := s.CreateProfileData(c.Request.Context(), requestBody, claims.ID, access_token)
+		if err != nil {
+			utils.BadRequest(c, "failed to create profile data", err.Error())
+			return
+		}
+		utils.StatusOK(c, "profile created successfully", res)
+	}
+
 }

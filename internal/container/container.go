@@ -9,6 +9,7 @@ import (
 	"github.com/joshua-takyi/auction/internal/jwt"
 	"github.com/joshua-takyi/auction/internal/models"
 	"github.com/joshua-takyi/auction/internal/service"
+	"github.com/joshua-takyi/auction/internal/websockets"
 	"github.com/resend/resend-go/v3"
 	storage_go "github.com/supabase-community/storage-go"
 	"github.com/supabase-community/supabase-go"
@@ -24,10 +25,14 @@ type Container struct {
 	SupabaseStorageClient *storage_go.Client
 	SupabaseClient        *supabase.Client
 
-	UserService    *service.UserService
-	ProductService *service.ProductService
-	AuctionService *service.AuctionService
-	JWTManager     *jwt.JWTManager
+	UserService         *service.UserService
+	ProductService      *service.ProductService
+	AuctionService      *service.AuctionService
+	JWTManager          *jwt.JWTManager
+	WSManager           *websockets.Manager
+	NotificationService *service.NotificationService
+	BidService          *service.BidService
+	WorkerService       *service.WorkerService
 }
 
 // NewContainer creates a new dependency injection container
@@ -55,6 +60,16 @@ func NewContainer(
 
 	jwtManager := jwt.NewJWTManager(cfg.JWTSecret, cfg.SupabaseJWTSecret, accessDuration)
 
+	wsManager := websockets.NewManager()
+	wsManager.Start()
+
+	notificationService := service.NewNotificationService(wsManager)
+	bidService := service.NewBidService(supaRepo, supaRepo, jwtManager, notificationService)
+
+	workerService := service.NewWorkerService(auctionService, logger)
+	// Start the worker (e.g. every 2 minutes as requested)
+	workerService.Start(2 * time.Minute)
+
 	return &Container{
 		Logger:                logger,
 		Config:                cfg,
@@ -67,5 +82,9 @@ func NewContainer(
 		ProductService:        productService,
 		AuctionService:        auctionService,
 		JWTManager:            jwtManager,
+		WSManager:             wsManager,
+		NotificationService:   notificationService,
+		BidService:            bidService,
+		WorkerService:         workerService,
 	}, nil
 }

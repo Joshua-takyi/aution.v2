@@ -175,3 +175,57 @@ func DeleteProduct(s *service.ProductService) gin.HandlerFunc {
 		utils.DELETED(c, "product deleted successfully", nil)
 	}
 }
+
+func GetProductWithAuctionHandler(s *service.ProductService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		paramProductID := c.Param(strings.TrimSpace("id"))
+		if paramProductID == "" {
+			utils.BadRequest(c, "productID can't be empty", "product")
+			return
+		}
+		productID, err := uuid.Parse(paramProductID)
+		if err != nil {
+			utils.BadRequest(c, "failed to parse string to uuid", "")
+			return
+		}
+		res, err := s.GetProductWithAuction(c.Request.Context(), productID)
+		if err != nil {
+			switch {
+			case errors.Is(err, constants.ErrNotFound):
+				utils.BadRequest(c, "no data found matching ID", "")
+			default:
+				utils.InternalServerError(c, "internal server error", "")
+			}
+			return
+		}
+		utils.OK(c, "product returned successfully", res)
+	}
+}
+func GetUserProductsHandler(s *service.ProductService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user, exists := c.Get("user")
+		if !exists {
+			utils.Unauthorized(c, "User not found", "")
+			return
+		}
+
+		userModel, ok := user.(*models.User)
+		if !ok {
+			utils.Unauthorized(c, "User not found", "Please login")
+			return
+		}
+
+		accessToken, _ := c.Cookie("access_token")
+
+		products, count, err := s.GetProductsByOwner(c.Request.Context(), accessToken, userModel.ID, 10, 0)
+		if err != nil {
+			utils.InternalServerError(c, "Failed to get user products", err.Error())
+			return
+		}
+
+		utils.OK(c, "Products retrieved successfully", gin.H{
+			"data":  products,
+			"count": count,
+		})
+	}
+}

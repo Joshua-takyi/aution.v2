@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/joshua-takyi/auction/internal/constants"
@@ -30,7 +33,7 @@ func (u *UserService) CreateUser(ctx context.Context, email, password string) (*
 	}
 
 	existingUser, err := u.userRepo.GetUserByEmail(ctx, email, "")
-	if err != nil {
+	if err != nil && !errors.Is(err, constants.ErrUserNotFound) {
 		return nil, err
 	}
 	if existingUser != nil {
@@ -69,4 +72,12 @@ func (u *UserService) GetUserByEmail(ctx context.Context, email string, accessTo
 
 func (u *UserService) RefreshToken(ctx context.Context, refreshToken string) (*types.TokenResponse, error) {
 	return u.userRepo.RefreshToken(ctx, refreshToken)
+}
+
+func (u *UserService) CreateProfileData(ctx context.Context, profile models.Profile, userID uuid.UUID, accessToken string) (*models.Profile, error) {
+	if err := models.Validate.Struct(profile); err != nil {
+		return nil, fmt.Errorf("failed to validate struct %w", err)
+	}
+	profile.UpdatedAt = time.Now()
+	return u.userRepo.CreateProfileData(ctx, profile, userID, accessToken)
 }

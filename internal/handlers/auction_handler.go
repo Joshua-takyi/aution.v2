@@ -56,16 +56,7 @@ func CreateAuctionHandler(s *service.AuctionService) gin.HandlerFunc {
 		}
 		created, err := s.CreateAuction(c.Request.Context(), &auction, accessToken, parsedProductID)
 		if err != nil {
-			switch {
-			case errors.Is(err, constants.ErrProductHasActiveAuction):
-				utils.BadRequest(c, "product has already been added auction", productID)
-			case errors.Is(err, constants.ErrProductNotApproved):
-				utils.BadRequest(c, "product is not approved for auction", productID)
-			case errors.Is(err, constants.ErrInvalidInput):
-				utils.BadRequest(c, "invalid input", "auction")
-			default:
-				utils.InternalServerError(c, "failed to create auction", "auction")
-			}
+			utils.BadRequest(c, "error", err.Error())
 			return
 		}
 
@@ -153,4 +144,121 @@ func GetAuctionByIdHandler(s *service.AuctionService) gin.HandlerFunc {
 		utils.OK(c, "auction retrieved successfully", returnedAuction)
 
 	}
+}
+
+func ListAuctionsHandler(s *service.AuctionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var params utils.PaginationParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			params = utils.DefaultPaginationParams()
+		}
+		params.Validate()
+
+		// 2. Update service to return auctions AND total count
+		auctions, total, err := s.ListAuctions(c.Request.Context(), params.GetLimit(), params.GetOffset())
+
+		if err != nil {
+			if errors.Is(err, constants.ErrNoData) {
+				// 3. Keep response structure consistent even when empty
+				utils.PaginatedOK(c, "no auctions found", []any{}, utils.NewPaginationMeta(params.Page, params.PageSize, 0))
+				return
+			}
+			utils.InternalServerError(c, "failed to list auctions", err.Error())
+			return
+		}
+
+		// 4. Create the metadata and send paginated response
+		meta := utils.NewPaginationMeta(params.Page, params.PageSize, total)
+		utils.PaginatedOK(c, "auctions listed successfully", auctions, meta)
+	}
+}
+
+func SearchAuctionsHandler(s *service.AuctionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		query := c.Query("q")
+		if query == "" {
+			utils.BadRequest(c, "query is required", "q")
+			return
+		}
+
+		var params utils.PaginationParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			params = utils.DefaultPaginationParams()
+		}
+		params.Validate()
+
+		auctions, total, err := s.SearchAuctions(c.Request.Context(), query, params.GetLimit(), params.GetOffset())
+
+		if err != nil {
+			if errors.Is(err, constants.ErrNoData) {
+				utils.PaginatedOK(c, "no auctions found", []any{}, utils.NewPaginationMeta(params.Page, params.PageSize, 0))
+				return
+			}
+			utils.InternalServerError(c, "failed to search auctions", err.Error())
+			return
+		}
+
+		meta := utils.NewPaginationMeta(params.Page, params.PageSize, total)
+		utils.PaginatedOK(c, "auctions searched successfully", auctions, meta)
+	}
+}
+
+func FilterAuctionsHandler(s *service.AuctionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var filter models.AuctionFilter
+		if err := c.ShouldBindQuery(&filter); err != nil {
+			utils.BadRequest(c, "invalid filter parameters", err.Error())
+			return
+		}
+
+		var params utils.PaginationParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			params = utils.DefaultPaginationParams()
+		}
+		params.Validate()
+
+		auctions, total, err := s.FilterAuctions(c.Request.Context(), filter, params.GetLimit(), params.GetOffset())
+
+		if err != nil {
+			if errors.Is(err, constants.ErrNoData) {
+				utils.PaginatedOK(c, "no auctions found", []any{}, utils.NewPaginationMeta(params.Page, params.PageSize, 0))
+				return
+			}
+			utils.InternalServerError(c, "failed to filter auctions", err.Error())
+			return
+		}
+
+		meta := utils.NewPaginationMeta(params.Page, params.PageSize, total)
+		utils.PaginatedOK(c, "auctions filtered successfully", auctions, meta)
+	}
+}
+
+func RecommendationHandler(s *service.AuctionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		categoryParam := c.Query("category")
+		currentID := c.Query("current_id")
+		if categoryParam == "" {
+			utils.BadRequest(c, "category field can't be empty", "auction")
+			return
+		}
+
+		var params utils.PaginationParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			params = utils.DefaultPaginationParams()
+		}
+
+		auctions, total, err := s.Recommendation(c.Request.Context(), categoryParam, currentID, params.GetLimit(), params.GetOffset())
+		if err != nil {
+			if errors.Is(err, constants.ErrNoData) {
+				utils.PaginatedOK(c, "no auctions found", []any{}, utils.NewPaginationMeta(params.Page, params.PageSize, 0))
+				return
+			}
+			utils.InternalServerError(c, "failed to filter auctions", err.Error())
+			return
+		}
+
+		meta := utils.NewPaginationMeta(params.Page, params.PageSize, total)
+		utils.PaginatedOK(c, "auctions filtered successfully", auctions, meta)
+	}
+
 }

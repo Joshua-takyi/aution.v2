@@ -105,7 +105,7 @@ func (sr *SupabaseRepo) GetUserByID(ctx context.Context, id uuid.UUID, accessTok
 	var results []map[string]any
 	// Debug log before execution
 	// fmt.Println("[SupabaseRepo] Executing query for profile...")
-	_, err = client.From(string(constants.ProfileTable)).Select("email, id, username, full_name, role,avatar_url, created_at, updated_at", "exact", false).Eq("id", id.String()).ExecuteTo(&results)
+	_, err = client.From(string(constants.ProfileTable)).Select("email, id, username, first_name,last_name, role,avatar_url, created_at, updated_at", "exact", false).Eq("id", id.String()).ExecuteTo(&results)
 	if err != nil {
 		// fmt.Printf("[SupabaseRepo] Error querying profile: %v\n", err)
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
@@ -153,7 +153,7 @@ func (sr *SupabaseRepo) GetUserByEmail(ctx context.Context, email string, access
 	}
 
 	if len(results) == 0 {
-		return nil, fmt.Errorf("user not found %w", err)
+		return nil, constants.ErrUserNotFound
 	}
 
 	// Marshal the first result to User struct
@@ -172,4 +172,41 @@ func (sr *SupabaseRepo) GetUserByEmail(ctx context.Context, email string, access
 
 func (sr *SupabaseRepo) RefreshToken(ctx context.Context, refreshToken string) (*types.TokenResponse, error) {
 	return sr.supabase.Auth.RefreshToken(refreshToken)
+}
+
+func (sr *SupabaseRepo) CreateProfileData(ctx context.Context, profile Profile, userID uuid.UUID, accessToken string) (*Profile, error) {
+	fmt.Printf("[SupabaseRepo] Attempting to update profile for UserID: %s\n", userID.String())
+
+	client, err := sr.GetAuthenticatedClient(accessToken)
+	if err != nil {
+		return nil, constants.ErrNoClient
+	}
+
+	// 1. Verify existence first to rule out ID mismatches
+	var check []map[string]any
+	_, err = client.From(string(constants.ProfileTable)).Select("id", "exact", false).Eq("id", userID.String()).ExecuteTo(&check)
+	if err != nil {
+		return nil, fmt.Errorf("pre-update check failed: %w", err)
+	}
+	if len(check) == 0 {
+		return nil, fmt.Errorf("no profile found in database for ID: %s. Does the row exist?", userID.String())
+	}
+
+	// 2. Perform the update
+	byteData, _, err := client.From(string(constants.ProfileTable)).Update(profile, "", "representation").Eq("id", userID.String()).Execute()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to update data in the profiles table, %w", err)
+	}
+
+	var response []Profile
+	if err := json.Unmarshal(byteData, &response); err != nil {
+		return nil, fmt.Errorf("failed to marshal byte to json, %w", err)
+	}
+
+	if len(response) == 0 {
+		return nil, fmt.Errorf("no profile data was updated - check RLS policies or column permissions")
+	}
+
+	return &response[0], nil
 }
