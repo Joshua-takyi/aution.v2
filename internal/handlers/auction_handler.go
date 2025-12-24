@@ -262,3 +262,46 @@ func RecommendationHandler(s *service.AuctionService) gin.HandlerFunc {
 	}
 
 }
+
+func GetUserAuctions(service *service.AuctionService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+
+		user, exist := c.Get("user")
+		if !exist {
+			utils.Unauthorized(c, "unauthenticated access", "error")
+			return
+		}
+
+		claims, ok := user.(*models.User)
+		if !ok {
+			utils.Unauthorized(c, "unauthorized access", "error")
+
+			return
+		}
+
+		var params utils.PaginationParams
+		if err := c.ShouldBindQuery(&params); err != nil {
+			params = utils.DefaultPaginationParams()
+		}
+
+		accessToken, _ := c.Cookie("access_token")
+
+		userID := claims.ID
+
+		res, total, err := service.GetUserAuctions(c.Request.Context(), userID, params.GetLimit(), params.GetOffset(), accessToken)
+		if err != nil {
+			switch {
+			case errors.Is(err, constants.ErrNoData):
+				utils.PaginatedOK(c, "no auctions found for this user", []models.AuctionResponse{}, utils.NewPaginationMeta(params.Page, params.PageSize, 0))
+			case errors.Is(err, constants.ErrNoClient):
+				utils.InternalServerError(c, "database connection error", err.Error())
+			default:
+				utils.InternalServerError(c, "failed to get user auction data", err.Error())
+			}
+			return
+		}
+
+		meta := utils.NewPaginationMeta(params.Page, params.PageSize, total)
+		utils.PaginatedOK(c, "user auctions retrieved successfully", res, meta)
+	}
+}

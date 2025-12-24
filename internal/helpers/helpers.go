@@ -66,7 +66,7 @@ func ValidateProductInput(product *models.Product) error {
 	return nil
 }
 
-func GenerateSlug(title, category string) string {
+func GenerateSlug(title string) string {
 	s := strings.ToLower(title)
 	s = strings.ReplaceAll(s, " ", "-")
 	s = strings.ReplaceAll(s, "&", "and")
@@ -81,4 +81,23 @@ func GenerateCsrfToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+const (
+	DefaultLimit = 10
+	MaxLimit     = 100
+)
+
+func DefaultLimitAndOffset(limit, offset int) (int, int) {
+	if limit <= 0 {
+		limit = DefaultLimit
+	} else if limit > MaxLimit {
+		limit = MaxLimit
+	}
+
+	if offset < 0 {
+		offset = 0
+	}
+
+	return limit, offset
 }

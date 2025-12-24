@@ -9,15 +9,24 @@ import (
 )
 
 type User struct {
-	ID        uuid.UUID `db:"id" json:"id,omitempty"`
-	Email     string    `db:"email" json:"email,omitempty"`
-	Role      string    `db:"role" json:"role,omitempty"`
-	AvatarURL string    `db:"avatar_url" json:"avatar_url,omitempty"`
-	CreatedAt time.Time `db:"created_at" json:"created_at,omitempty"`
-	UpdatedAt time.Time `db:"updated_at" json:"updated_at,omitempty"`
+	ID            uuid.UUID `db:"id" json:"id,omitempty"`
+	Email         string    `db:"email" json:"email,omitempty"`
+	UserName      string    `db:"username" json:"username,omitempty"`
+	FirstName     string    `db:"first_name" json:"first_name,omitempty"`
+	LastName      string    `db:"last_name" json:"last_name,omitempty"`
+	Phone         string    `db:"phone" json:"phone,omitempty"`
+	PostalCode    string    `db:"postal_code" json:"postal_code,omitempty"`
+	Region        string    `db:"region" json:"region,omitempty"`
+	City          string    `db:"city" json:"city,omitempty"`
+	StreetAddress string    `db:"street_address" json:"street_address,omitempty"`
+	Role          string    `db:"role" json:"role,omitempty"`
+	AvatarURL     string    `db:"avatar_url" json:"avatar_url,omitempty"`
+	CreatedAt     time.Time `db:"created_at" json:"created_at,omitempty"`
+	UpdatedAt     time.Time `db:"updated_at" json:"updated_at,omitempty"`
 }
 
 type Profile struct {
+	ID            uuid.UUID `db:"id" json:"id,omitempty"`
 	FirstName     string    `db:"first_name" json:"first_name" validate:"required"`
 	LastName      string    `db:"last_name" json:"last_name" validate:"required"`
 	UserName      string    `db:"username" json:"username,omitempty"`
@@ -51,8 +60,7 @@ type UserInterface interface {
 	SignIn(ctx context.Context, email, password string) (*types.TokenResponse, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*types.TokenResponse, error)
 	SignOut(ctx context.Context, accessToken string) error
-	// Helper to get user from DB if we sync them, or just from context
 	GetUserByID(ctx context.Context, id uuid.UUID, accessToken string) (*User, error)
 	GetUserByEmail(ctx context.Context, email string, accessToken string) (*User, error)
-	CreateProfileData(ctx context.Context, profile Profile, userID uuid.UUID, accessToken string) (*Profile, error)
+	UpsertProfile(ctx context.Context, profile Profile, userID uuid.UUID, accessToken string) (*Profile, error)
 }

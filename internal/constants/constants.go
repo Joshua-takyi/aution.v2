@@ -3,8 +3,9 @@ package constants
 import "errors"
 
 const (
-	RoleAdmin = "admin"
-	RoleUser  = "user"
+	RoleAdmin  = "admin"
+	RoleUser   = "user"
+	RoleSeller = "verified_seller"
 )
 
 const (

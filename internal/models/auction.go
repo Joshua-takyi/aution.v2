@@ -43,6 +43,11 @@ type AuctionFilter struct {
 	SortBy   string   `form:"sort_by"`
 }
 
+// type SummaryResponse struct {
+// 	Auction
+// 	Products Product `json:"product"`
+// }
+
 // calculateDuration is to calculate the duration of the auction
 func (a *Auction) CalculateDuration() time.Duration {
 	return a.EndTime.Sub(a.StartTime)
@@ -70,6 +75,8 @@ type AuctionInterface interface {
 	SearchAuctions(ctx context.Context, query string, limit, offset int) ([]*AuctionResponse, int64, error)
 	FilterAuctions(ctx context.Context, filter AuctionFilter, limit, offset int) ([]*AuctionResponse, int64, error)
 	UpdateAuctionStatuses(ctx context.Context) (map[string]any, error)
+	GetAuctionSummary(ctx context.Context, userID uuid.UUID, limit, offset int, accessToken string) ([]AuctionResponse, error)
+	GetUserAuctions(ctx context.Context, userID uuid.UUID, limit, offset int, accessToken string) ([]AuctionResponse, int64, error)
 }
 
 func (sr *SupabaseRepo) CreateAuction(ctx context.Context, auction *Auction, accessToken string, productID uuid.UUID) (*Auction, error) {
@@ -331,4 +338,53 @@ func (sr *SupabaseRepo) Recommendation(ctx context.Context, category string, cur
 	}
 
 	return data, count, nil
+}
+
+func (sr *SupabaseRepo) GetAuctionSummary(ctx context.Context, userID uuid.UUID, limit, offset int, accessToken string) ([]AuctionResponse, error) {
+	client, err := sr.GetAuthenticatedClient(accessToken)
+	if err != nil {
+		return nil, constants.ErrNoClient
+	}
+
+	res, count, err := client.From(string(constants.AuctionTable)).Select("*, products!inner(*)", "exact", false).Limit(limit, "").Eq("products.owner_id", userID.String()).Execute()
+
+	if err != nil {
+		return nil, fmt.Errorf("an error occurred %w", err)
+	}
+
+	if count == 0 {
+		return nil, constants.ErrNoData
+	}
+
+	var s []AuctionResponse
+
+	if err := json.Unmarshal(res, &s); err != nil {
+		return nil, fmt.Errorf("failed to marshal user auction summary into response struct %w", err)
+	}
+
+	return s, nil
+}
+
+func (sr *SupabaseRepo) GetUserAuctions(ctx context.Context, userID uuid.UUID, limit, offset int, accessToken string) ([]AuctionResponse, int64, error) {
+
+	client, err := sr.GetAuthenticatedClient(accessToken)
+	if err != nil {
+		return nil, 0, constants.ErrNoClient
+	}
+	res, count, err := client.From(string(constants.AuctionTable)).Select("*, products!inner(*)", "exact", false).Eq("products.owner_id", userID.String()).Range(offset, offset+limit-1, "").Execute()
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get user auctions data %w", err)
+	}
+
+	var s []AuctionResponse
+
+	if err := json.Unmarshal(res, &s); err != nil {
+		return nil, 0, fmt.Errorf("failed to marshal user auction response into struct %w", err)
+	}
+
+	if len(s) == 0 {
+		return nil, 0, constants.ErrNoData
+	}
+	return s, count, nil
+
 }

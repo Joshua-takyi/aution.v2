@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/joshua-takyi/auction/internal/constants"
+	"github.com/joshua-takyi/auction/internal/helpers"
 	"github.com/joshua-takyi/auction/internal/models"
 )
 
@@ -190,4 +191,22 @@ func (s *AuctionService) Recommendation(ctx context.Context, category string, cu
 	}
 
 	return s.auctionRepo.Recommendation(ctx, category, currentID, limit, offset)
+}
+
+func (s *AuctionService) GetAuctionSummary(ctx context.Context, userID uuid.UUID, limit, offset int, accessToken string) ([]models.AuctionResponse, error) {
+	if limit == 0 {
+		limit = 10
+	}
+	if offset == 0 {
+		offset = 0
+	}
+
+	return s.auctionRepo.GetAuctionSummary(ctx, userID, limit, offset, accessToken)
+}
+
+func (s *AuctionService) GetUserAuctions(ctx context.Context, userID uuid.UUID, limit, offset int, accessToken string) ([]models.AuctionResponse, int64, error) {
+
+	lim, off := helpers.DefaultLimitAndOffset(limit, offset)
+
+	return s.auctionRepo.GetUserAuctions(ctx, userID, lim, off, accessToken)
 }

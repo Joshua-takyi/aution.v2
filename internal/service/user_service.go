@@ -16,7 +16,6 @@ import (
 type UserService struct {
 	userRepo models.UserInterface
 	resend   *resend.Client
-	// profileRepo models.ProfileInterface
 }
 
 // NewUserService - removing verificationClient from constructor
@@ -74,10 +73,11 @@ func (u *UserService) RefreshToken(ctx context.Context, refreshToken string) (*t
 	return u.userRepo.RefreshToken(ctx, refreshToken)
 }
 
-func (u *UserService) CreateProfileData(ctx context.Context, profile models.Profile, userID uuid.UUID, accessToken string) (*models.Profile, error) {
+func (u *UserService) UpsertProfile(ctx context.Context, profile models.Profile, userID uuid.UUID, accessToken string) (*models.Profile, error) {
 	if err := models.Validate.Struct(profile); err != nil {
 		return nil, fmt.Errorf("failed to validate struct %w", err)
 	}
+	profile.ID = userID
 	profile.UpdatedAt = time.Now()
-	return u.userRepo.CreateProfileData(ctx, profile, userID, accessToken)
+	return u.userRepo.UpsertProfile(ctx, profile, userID, accessToken)
 }

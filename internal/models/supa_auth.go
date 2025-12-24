@@ -86,7 +86,6 @@ func (sr *SupabaseRepo) SignOut(ctx context.Context, accessToken string) error {
 }
 
 func (sr *SupabaseRepo) GetUserByID(ctx context.Context, id uuid.UUID, accessToken string) (*User, error) {
-	// fmt.Printf("[SupabaseRepo] GetUserByID called for ID: %s, Token Length: %d\n", id.String(), len(accessToken))
 	var client *supabase.Client
 	var err error
 
@@ -103,18 +102,12 @@ func (sr *SupabaseRepo) GetUserByID(ctx context.Context, id uuid.UUID, accessTok
 	}
 
 	var results []map[string]any
-	// Debug log before execution
-	// fmt.Println("[SupabaseRepo] Executing query for profile...")
-	_, err = client.From(string(constants.ProfileTable)).Select("email, id, username, first_name,last_name, role,avatar_url, created_at, updated_at", "exact", false).Eq("id", id.String()).ExecuteTo(&results)
+	_, err = client.From(string(constants.ProfileTable)).Select("email, id, username, first_name,last_name, role,postal_code, city, phone, region, avatar_url, created_at, updated_at, street_address", "exact", false).Eq("id", id.String()).ExecuteTo(&results)
 	if err != nil {
-		// fmt.Printf("[SupabaseRepo] Error querying profile: %v\n", err)
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
 
-	// fmt.Printf("[SupabaseRepo] Query success. Results found: %d\n", len(results))
-
 	if len(results) == 0 {
-		// fmt.Println("[SupabaseRepo] No profile found for this ID.")
 		return nil, constants.ErrUserNotFound
 	}
 
@@ -174,26 +167,14 @@ func (sr *SupabaseRepo) RefreshToken(ctx context.Context, refreshToken string) (
 	return sr.supabase.Auth.RefreshToken(refreshToken)
 }
 
-func (sr *SupabaseRepo) CreateProfileData(ctx context.Context, profile Profile, userID uuid.UUID, accessToken string) (*Profile, error) {
+func (sr *SupabaseRepo) UpsertProfile(ctx context.Context, profile Profile, userID uuid.UUID, accessToken string) (*Profile, error) {
 	fmt.Printf("[SupabaseRepo] Attempting to update profile for UserID: %s\n", userID.String())
 
 	client, err := sr.GetAuthenticatedClient(accessToken)
 	if err != nil {
 		return nil, constants.ErrNoClient
 	}
-
-	// 1. Verify existence first to rule out ID mismatches
-	var check []map[string]any
-	_, err = client.From(string(constants.ProfileTable)).Select("id", "exact", false).Eq("id", userID.String()).ExecuteTo(&check)
-	if err != nil {
-		return nil, fmt.Errorf("pre-update check failed: %w", err)
-	}
-	if len(check) == 0 {
-		return nil, fmt.Errorf("no profile found in database for ID: %s. Does the row exist?", userID.String())
-	}
-
-	// 2. Perform the update
-	byteData, _, err := client.From(string(constants.ProfileTable)).Update(profile, "", "representation").Eq("id", userID.String()).Execute()
+	byteData, _, err := client.From(string(constants.ProfileTable)).Upsert(profile, "id", "", "exact").Execute()
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to update data in the profiles table, %w", err)

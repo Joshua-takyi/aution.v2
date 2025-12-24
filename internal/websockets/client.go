@@ -46,7 +46,6 @@ func (c *Client) readPump() {
 	c.connection.SetReadLimit(maxMessageSize)
 
 	for {
-		// Read incoming message from the WebSocket
 		_, message, err := c.connection.ReadMessage()
 		if err != nil {
 			// Connection error or closed - exit the loop

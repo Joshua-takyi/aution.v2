@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joshua-takyi/auction/internal/constants"
@@ -122,6 +123,7 @@ func AuthenticateUserHandler(s *service.UserService, logger *utils.Logger, isPro
 		c.SetCookie("access_token", tokenResponse.AccessToken, int(tokenResponse.ExpiresIn), "/", "", isProduction, true)
 		c.SetCookie("refresh_token", tokenResponse.RefreshToken, 30*24*60*60, "/", "", isProduction, true)
 		c.SetCookie("csrf_token", csrf, int(tokenResponse.ExpiresIn), "/", "", isProduction, false)
+		c.SetCookie("logged_in", "true", 30*24*60*60, "/", "", false, false)
 
 		// Return the full Supabase token response (Access Token, Refresh Token, User, etc.)
 		utils.StatusOK(c, constants.MsgLoginSuccess, tokenResponse)
@@ -138,6 +140,7 @@ func SignOut(s *service.UserService, isProduction bool) gin.HandlerFunc {
 		c.SetCookie("access_token", "", -1, "/", "", isProduction, true)
 		c.SetCookie("refresh_token", "", -1, "/", "", isProduction, true)
 		c.SetCookie("csrf_token", "", -1, "/", "", isProduction, false)
+		c.SetCookie("logged_in", "", -1, "/", "", false, false)
 
 		utils.StatusOK(c, constants.MsgLogoutSuccess, nil)
 	}
@@ -147,12 +150,14 @@ func RefreshToken(s *service.UserService, isProduction bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		refresh_token, err := c.Cookie("refresh_token")
 		if err != nil {
+			fmt.Printf("[RefreshToken] Cookie missing: %v\n", err)
 			utils.BadRequest(c, "Refresh token is required", "Please try again later")
 			return
 		}
 
 		tokenResponse, err := s.RefreshToken(c.Request.Context(), refresh_token)
 		if err != nil {
+			fmt.Printf("[RefreshToken] Supabase error: %v\n", err)
 			utils.BadRequest(c, err.Error(), "Please try again later")
 			return
 		}
@@ -166,11 +171,12 @@ func RefreshToken(s *service.UserService, isProduction bool) gin.HandlerFunc {
 		c.SetCookie("access_token", tokenResponse.AccessToken, int(tokenResponse.ExpiresIn), "/", "", isProduction, true)
 		c.SetCookie("refresh_token", tokenResponse.RefreshToken, 30*24*60*60, "/", "", isProduction, true)
 		c.SetCookie("csrf_token", csrf, int(tokenResponse.ExpiresIn), "/", "", isProduction, false)
+		c.SetCookie("logged_in", "true", 30*24*60*60, "/", "", false, false)
 		utils.StatusOK(c, constants.MsgLoginSuccess, tokenResponse)
 	}
 }
 
-func CreateProfileDataHandler(s *service.UserService) gin.HandlerFunc {
+func UpsertProfileHandler(s *service.UserService) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		user, exist := c.Get("user")
 		if !exist {
@@ -204,7 +210,7 @@ func CreateProfileDataHandler(s *service.UserService) gin.HandlerFunc {
 			return
 		}
 
-		res, err := s.CreateProfileData(c.Request.Context(), requestBody, claims.ID, access_token)
+		res, err := s.UpsertProfile(c.Request.Context(), requestBody, claims.ID, access_token)
 		if err != nil {
 			utils.BadRequest(c, "failed to create profile data", err.Error())
 			return

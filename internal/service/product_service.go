@@ -129,7 +129,7 @@ func (s *ProductService) CreateProduct(ctx context.Context, product *models.Prod
 	product.Images = cleanedImages
 	product.CreatedAt = now
 	product.UpdatedAt = now
-	product.Slug = helpers.GenerateSlug(product.Title, product.Category)
+	product.Slug = helpers.GenerateSlug(product.Title)
 	product.Status = constants.ProductPendingReview
 	product.OwnerID = userID
 	// fmt.Printf("[ProductService] Product prepared: ID=%s, Title=%s, Images=%d\n", product.ID, product.Title, len(product.Images))

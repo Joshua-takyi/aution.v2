@@ -72,7 +72,7 @@ func SetupRoutes(c *container.Container, cfg *config.Config) *gin.Engine {
 			userRoutes.GET("/", handlers.GetUserHandler())
 			userRoutes.GET("/profile", handlers.GetProfileHandler(c.UserService))
 			userRoutes.POST("/signout", handlers.SignOut(c.UserService, c.IsProduction))
-			userRoutes.PATCH("/", handlers.CreateProfileDataHandler(c.UserService))
+			userRoutes.PUT("", handlers.UpsertProfileHandler(c.UserService))
 		}
 
 		// Product Protected Routes
@@ -92,6 +92,7 @@ func SetupRoutes(c *container.Container, cfg *config.Config) *gin.Engine {
 			auctionRoutes.POST("/:id/bid", handlers.PlaceBidHandler(c.BidService))
 			auctionRoutes.GET("/:id/bids", handlers.GetBids(c.BidService))
 			auctionRoutes.GET("/user/bids", handlers.GetUserAuctionWithBidHandler(c.BidService))
+			auctionRoutes.GET("/user", handlers.GetUserAuctions(c.AuctionService))
 		}
 
 		// Ticket generation for WebSockets
